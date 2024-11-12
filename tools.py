@@ -40,7 +40,6 @@ def python_interpreter(code: str, thread_id: str = "default", timeout: int = 5) 
     Returns:
         str: Output of the code execution (stdout + stderr)
     """
-    # Capture stdout and stderr
     stdout = StringIO()
     stderr = StringIO()
     
@@ -50,8 +49,28 @@ def python_interpreter(code: str, thread_id: str = "default", timeout: int = 5) 
         
         # Redirect stdout and stderr
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            # Execute the code with the thread's state
-            exec(code, {"__builtins__": __builtins__}, local_dict)
+            try:
+                # Execute the code with the thread's state
+                exec(code, {"__builtins__": __builtins__}, local_dict)
+            except AssertionError as ae:
+                # Special handling for assertion errors to make them more informative
+                return f"Assertion Error: {str(ae)}\nThis indicates a condition you were checking for failed. Review the assertion and the values being tested."
+            except Exception as e:
+                # For other errors, provide debugging suggestions
+                error_msg = (
+                    f"Error executing code: {str(e)}\n"
+                    f"Traceback:\n{traceback.format_exc()}\n"
+                    "\nDebugging Suggestions:\n"
+                    "1. Add assert statements to check variable values\n"
+                    "2. Print intermediate results\n"
+                    "3. Verify input types and values\n"
+                    "4. Check for edge cases\n"
+                    "\nExample:\n"
+                    "assert isinstance(your_list, list), f'Expected list, got {type(your_list)}'\n"
+                    "assert all(isinstance(x, (int, float)) for x in your_list), 'All elements must be numbers'\n"
+                    "assert len(your_list) > 0, 'List cannot be empty'"
+                )
+                return error_msg
             
         # Save the updated state
         interpreter_states[thread_id] = local_dict

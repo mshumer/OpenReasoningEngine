@@ -113,7 +113,13 @@ def thinking_loop(
             "2. python: For executing Python code\n"
             "When you need to perform calculations, use the calculator tool.\n"
             "When you need to write or test Python code, use the python tool.\n"
-            "Return <DONE> after the last step.\n"
+            "\nWhen writing Python code:\n"
+            "- If your code produces an error, add print statements to debug the issue\n"
+            "- Use assertions/prints to validate inputs, intermediate results, and outputs\n"
+            "- Print the state to see what's happening\n"
+            "- When an error occurs, systematically add checks to identify where the problem is\n"
+            "- Structure your debugging process step by step\n"
+            "\nReturn <DONE> after the last step.\n"
             "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
         )
     }
@@ -176,28 +182,48 @@ def thinking_loop(
                     print(f"{Fore.YELLOW}│ Tool Call Detected{Style.RESET_ALL}")
                     print(f"{Fore.YELLOW}├──────────────────────────────────────────{Style.RESET_ALL}")
                 
-                # Execute tool and get result
-                tool_name = tool_call['function']['name']
-                arguments = json.loads(tool_call['function']['arguments'])
+                try:
+                    # Execute tool and get result
+                    tool_name = tool_call['function']['name']
+                    
+                    # Add error handling for argument parsing
+                    try:
+                        if 'arguments' not in tool_call['function'] or not tool_call['function']['arguments']:
+                            if verbose:
+                                print(f"{Fore.RED}No arguments provided in tool call{Style.RESET_ALL}")
+                            continue
+                            
+                        arguments = json.loads(tool_call['function']['arguments'])
+                        
+                    except json.JSONDecodeError as e:
+                        if verbose:
+                            print(f"{Fore.RED}Invalid JSON in tool arguments: {tool_call['function'].get('arguments', 'NO_ARGS')}{Style.RESET_ALL}")
+                            print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
+                        continue
+                    
+                    if verbose:
+                        print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
+                        print(f"{Fore.YELLOW}│ Arguments: {Style.RESET_ALL}{json.dumps(arguments, indent=2)}")
+                    
+                    result = execute_tool(tool_name, arguments)
+                    
+                    # Add tool result to both histories
+                    tool_message = {
+                        'role': 'tool',
+                        'tool_call_id': tool_call['id'],
+                        'content': str(result)
+                    }
+                    conversation_history.append(tool_message)
+                    full_conversation_history.append(tool_message)
+                    
+                    if verbose:
+                        print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
+                        print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
                 
-                if verbose:
-                    print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
-                    print(f"{Fore.YELLOW}│ Arguments: {Style.RESET_ALL}{json.dumps(arguments, indent=2)}")
-                
-                result = execute_tool(tool_name, arguments)
-                
-                # Add tool result to both histories
-                tool_message = {
-                    'role': 'tool',
-                    'tool_call_id': tool_call['id'],
-                    'content': str(result)
-                }
-                conversation_history.append(tool_message)
-                full_conversation_history.append(tool_message)
-                
-                if verbose:
-                    print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
-                    print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
+                except Exception as e:
+                    if verbose:
+                        print(f"{Fore.RED}Error executing tool: {str(e)}{Style.RESET_ALL}")
+                    continue
 
         # Check for termination conditions
         if response.get('content'):
@@ -225,7 +251,7 @@ def complete_reasoning_task(
     model: str = 'gpt-4o-mini',
     temperature: float = 0.7,
     top_p: float = 1.0,
-    max_tokens: int = 500,
+    max_tokens: int = 3000,
     api_url: str = 'https://api.openai.com/v1/chat/completions',
     verbose: bool = False,
     log_conversation: bool = False,
@@ -310,7 +336,7 @@ def complete_reasoning_task(
     # Add final completion request
     final_user_message = {
         'role': 'user',
-        'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
+        'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer. Do not use any tools, just respond with your final answer.'
     }
     conversation_history.append(final_user_message)
 
