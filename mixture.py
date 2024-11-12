@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple, Any, Union
 from engine import complete_reasoning_task
 import json
 from colorama import init, Fore, Style
@@ -106,8 +106,9 @@ def ensemble(
     coordinator: Dict[str, str],
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
-    max_workers: Optional[int] = None
-) -> str:
+    max_workers: Optional[int] = None,
+    return_reasoning: bool = False
+) -> Union[str, Tuple[str, List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]]]:
     """
     Run multiple agents in parallel and coordinate their responses.
     
@@ -117,10 +118,12 @@ def ensemble(
         coordinator: Dictionary containing 'model', 'api_key', and 'api_url' for the coordinating model
         verbose: Whether to show detailed output
         chain_store_api_key: API key for chain store if using
-        max_workers: Maximum number of parallel workers (defaults to min(32, os.cpu_count() + 4))
+        max_workers: Maximum number of parallel workers
+        return_reasoning: Whether to return the full reasoning chains
     
     Returns:
-        Final coordinated response
+        If return_reasoning is False: Final coordinated response (str)
+        If return_reasoning is True: Tuple of (final response, list of agent results)
     """
     if verbose:
         print(f"\n{Fore.MAGENTA}Starting Ensemble for task:{Style.RESET_ALL}")
@@ -169,6 +172,8 @@ Based on your analysis, synthesize these responses into a single, high-quality r
         chain_store_api_key=None  # Don't use chain store for coordinator
     )
     
+    if return_reasoning:
+        return coordinator_response, agent_results
     return coordinator_response
 
 # Alias for backward compatibility
