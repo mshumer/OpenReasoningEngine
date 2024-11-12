@@ -1,10 +1,14 @@
 import os
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from colorama import init, Fore, Style
 from tools import execute_tool
 import json
 from datetime import datetime
+from chain_store import (
+    get_similar_chains, 
+    prepare_examples_messages
+)
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -25,17 +29,6 @@ def send_message_to_api(
     """
     Send a message to the OpenAI API and return the assistant's response.
     """
-    # Create the system message
-    system_content = (
-        f"<TASK>\n{task}\n\n<INSTRUCTIONS>\n"
-        "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
-        "Each individual reasoning step should be brief.\n"
-        "When you need to perform calculations, use the calculator tool.\n"
-        "Return <DONE> after the last step."
-    )
-    # Insert the system message at the beginning
-    messages_with_system = [{'role': 'system', 'content': system_content}] + messages
-
     if verbose and is_first_step:
         print(f"\n{Fore.CYAN}╭──────────────────────────────────────────{Style.RESET_ALL}")
         print(f"{Fore.CYAN}│ Sending Request to API{Style.RESET_ALL}")
@@ -54,7 +47,7 @@ def send_message_to_api(
             },
             json={
                 'model': model,
-                'messages': messages_with_system,
+                'messages': messages,
                 'tools': tools,
                 'max_tokens': max_tokens,
                 'temperature': temperature,
@@ -86,7 +79,8 @@ def thinking_loop(
     top_p: float = 1.0,
     max_tokens: int = 500,
     api_url: str = 'https://api.openai.com/v1/chat/completions',
-    verbose: bool = False
+    verbose: bool = False,
+    chain_store_api_key: Optional[str] = None
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -100,26 +94,53 @@ def thinking_loop(
         print(f"{Fore.MAGENTA}│ Starting Thinking Loop{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
+    # Get similar chains if chain_store_api_key is provided
+    example_messages = []
+    if chain_store_api_key:
+        similar_chains = get_similar_chains(task, chain_store_api_key)
+        example_messages = prepare_examples_messages(similar_chains, tools)
+
+    # Create the system message for the current task
+    system_message = {
+        'role': 'system',
+        'content': (
+            f"<CURRENT_TASK>\n{task}\n\n"
+            "<INSTRUCTIONS>\n"
+            "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
+            "Each individual reasoning step should be brief.\n"
+            "When you need to perform calculations, use the calculator tool.\n"
+            "Return <DONE> after the last step.\n"
+            "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
+        )
+    }
+
+    # Start with example messages and system message in the history
+    full_conversation_history = example_messages + [system_message]
+
     while continue_loop:
         if verbose:
             print(f"\n{Fore.BLUE}Step {step_count}{Style.RESET_ALL}")
             print(f"{Fore.BLUE}{'─' * 40}{Style.RESET_ALL}")
 
-        # Add user message to conversation history
+        # Add user message
         user_message = {
             'role': 'user',
             'content': (
-                'Think about your next reasoning step to perform the TASK. '
+                'Think about your next reasoning step to perform the CURRENT_TASK. '
                 'Return just the next step. If you need to calculate something, use the calculator tool. '
+                'Remember, steps should be very brief. '
                 'If this is the final step, return <DONE>.'
             )
         }
+        
+        # Add to both conversation histories
         conversation_history.append(user_message)
+        full_conversation_history.append(user_message)
 
         # Get response from AI API
         response = send_message_to_api(
             task,
-            conversation_history,
+            full_conversation_history,
             api_key,
             tools,
             model,
@@ -131,17 +152,19 @@ def thinking_loop(
             is_first_step=(step_count == 1)
         )
 
-        # First, add assistant's response to conversation history and display it
-        conversation_history.append({
+        # Add assistant's response to both histories
+        assistant_message = {
             'role': 'assistant',
             'content': response.get('content'),
             'tool_calls': response.get('tool_calls', None)
-        })
+        }
+        conversation_history.append(assistant_message)
+        full_conversation_history.append(assistant_message)
 
         if verbose and response.get('content'):
             print(f"\n{Fore.GREEN}Assistant: {Style.RESET_ALL}{response['content']}")
 
-        # Then handle tool calls if present
+        # Handle tool calls
         if 'tool_calls' in response and response['tool_calls']:
             for tool_call in response['tool_calls']:
                 if verbose:
@@ -159,18 +182,18 @@ def thinking_loop(
                 
                 result = execute_tool(tool_name, arguments)
                 
-                # Add tool result to conversation
-                conversation_history.append({
+                # Add tool result to both histories
+                tool_message = {
                     'role': 'tool',
                     'tool_call_id': tool_call['id'],
                     'content': str(result)
-                })
+                }
+                conversation_history.append(tool_message)
+                full_conversation_history.append(tool_message)
                 
                 if verbose:
                     print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
                     print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
-                
-                continue
 
         # Check for termination conditions
         if response.get('content'):
@@ -182,7 +205,7 @@ def thinking_loop(
 
             if any(term in response['content'].lower() for term in termination_phrases):
                 if verbose:
-                    print(f"\n{Fore.MAGENTA}╭──────────────────────────────���───────────{Style.RESET_ALL}")
+                    print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}│ Thinking Loop Complete{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}│ Total Steps: {step_count}{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
@@ -190,7 +213,10 @@ def thinking_loop(
 
         step_count += 1
 
-    return conversation_history
+    if verbose:
+        print(f"Returning conversation history: {full_conversation_history}")
+
+    return full_conversation_history
 
 def complete_reasoning_task(
     task: str,
@@ -201,24 +227,12 @@ def complete_reasoning_task(
     max_tokens: int = 500,
     api_url: str = 'https://api.openai.com/v1/chat/completions',
     verbose: bool = False,
-    log_conversation: bool = False
-) -> str:
+    log_conversation: bool = False,
+    chain_store_api_key: Optional[str] = None
+) -> Tuple[str, List[Dict]]:
     """
     Complete a task using the step-by-step thinking process.
-
-    Args:
-        task (str): The task to complete.
-        api_key (Optional[str]): Your API key.
-        model (str): The model to use.
-        temperature (float): Sampling temperature.
-        top_p (float): Nucleus sampling probability.
-        max_tokens (int): Maximum tokens to generate.
-        api_url (str): The API URL to use.
-        verbose (bool): Whether to print detailed progress.
-        log_conversation (bool): Whether to save conversation history to a file.
-
-    Returns:
-        str: The final response from the model.
+    Returns both the final response and the conversation history.
     """
     if api_key is None:
         raise ValueError('API key not provided.')
@@ -259,13 +273,14 @@ def complete_reasoning_task(
         top_p,
         max_tokens,
         api_url,
-        verbose
+        verbose,
+        chain_store_api_key=chain_store_api_key
     )
 
     # Add final completion request
     final_user_message = {
         'role': 'user',
-        'content': 'Complete the <TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
+        'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
     }
     conversation_history.append(final_user_message)
 
@@ -295,6 +310,11 @@ def complete_reasoning_task(
 
     # Log conversation history if logging is enabled
     if log_conversation:
+        # Remove example chains from conversation history by removing everything prior to the bottom-most system message
+        bottom_system_message_index = next((i for i, msg in enumerate(reversed(conversation_history)) if msg.get('role') == 'system'), None)
+        if bottom_system_message_index is not None:
+            conversation_history = conversation_history[-bottom_system_message_index:]
+        
         # Create logs directory if it doesn't exist
         os.makedirs('logs', exist_ok=True)
         
@@ -324,4 +344,4 @@ def complete_reasoning_task(
             if verbose:
                 print(f"\n{Fore.RED}Failed to log conversation history: {Style.RESET_ALL}{str(e)}")
 
-    return final_response
+    return final_response, conversation_history, tools
