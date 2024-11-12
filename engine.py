@@ -108,7 +108,11 @@ def thinking_loop(
             "<INSTRUCTIONS>\n"
             "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
             "Each individual reasoning step should be brief.\n"
+            "You have access to two tools:\n"
+            "1. calculator: For mathematical calculations\n"
+            "2. python: For executing Python code\n"
             "When you need to perform calculations, use the calculator tool.\n"
+            "When you need to write or test Python code, use the python tool.\n"
             "Return <DONE> after the last step.\n"
             "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
         )
@@ -213,9 +217,6 @@ def thinking_loop(
 
         step_count += 1
 
-    if verbose:
-        print(f"Returning conversation history: {full_conversation_history}")
-
     return full_conversation_history
 
 def complete_reasoning_task(
@@ -245,23 +246,52 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Define available tools
-    tools = [{
-        "type": "function",
-        "function": {
-            "name": "calculator",
-            "description": "Perform mathematical calculations",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "operation": {
-                        "type": "string",
-                        "description": "The mathematical expression to evaluate (e.g., '2 + 2' or '1000 * (1 + 0.05) ** 5')"
-                    }
-                },
-                "required": ["operation"]
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "calculator",
+                "description": "Perform mathematical calculations",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "description": "The mathematical expression to evaluate (e.g., '2 + 2' or '1000 * (1 + 0.05) ** 5')"
+                        }
+                    },
+                    "required": ["operation"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "python",
+                "description": "Execute Python code and return the output. Use thread_id to maintain state across calls.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "description": "The Python code to execute"
+                        },
+                        "thread_id": {
+                            "type": "string",
+                            "description": "Identifier for the execution thread. Use the same ID to maintain state across calls.",
+                            "default": "default"
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Maximum execution time in seconds",
+                            "default": 5
+                        }
+                    },
+                    "required": ["code"]
+                }
             }
         }
-    }]
+    ]
 
     # Run the thinking loop
     conversation_history = thinking_loop(
