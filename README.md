@@ -1,20 +1,19 @@
 # OpenReasoningEngine
 
-A modular engine for complex reasoning tasks using Large Language Models (LLMs). Features built-in tools, chain storage, and ensemble methods for enhanced reasoning capabilities.
+This repo will serve as a modular, open-source test-time compute engine — anyone in the community with a useful idea to improve model capabilities through is encouraged to add their approach to the system. As many approaches are added, this system will enable users to compose them to drastically increase capabilities.
 
-## Features
+## Initial Features
 
-- Step-by-step reasoning with integrated tools (calculator, Python interpreter)
-- Semantic chain search powered by Cohere embeddings
-- Parallel ensemble processing with multiple models
-- Stateful Python interpreter sessions
-- Comprehensive logging and chain storage
+- Step-by-step reasoning with integrated tools (calculator, Python interpreter, web access, Wolfram Alpha)
+- Semantic chain search powered by Cohere embeddings so the models within the system can continually learn to better use this engine's rails
+- Parallel ensemble processing with multiple models (MoA)
+- Stateful Python interpreter sessions, enabling multiple threads at once
 - Model-agnostic API supporting multiple providers (OpenAI, Anthropic, etc.)
 
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/OpenReasoningEngine.git
+git clone https://github.com/mshumer/OpenReasoningEngine.git
 cd OpenReasoningEngine
 pip install -r requirements.txt
 ```
