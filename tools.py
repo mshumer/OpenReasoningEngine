@@ -1,11 +1,12 @@
 import os
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List, Union
 import sys
 from io import StringIO
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
 from collections import defaultdict
+import json
 
 # Store for interpreter states
 interpreter_states = defaultdict(dict)
@@ -104,24 +105,81 @@ def python_interpreter(code: str, thread_id: str = "default", timeout: int = 5) 
         stdout.close()
         stderr.close()
 
-def execute_tool(tool_name: str, parameters: Dict[str, Any]) -> Any:
+def web_research(
+    query: str,
+    api_key: str = None,
+    api_url: str = "https://openrouter.ai/api/v1/chat/completions"
+) -> str:
     """
-    Execute the specified tool with the given parameters.
+    Perform web research using Perplexity.
     
     Args:
-        tool_name (str): The name of the tool to execute
-        parameters (Dict[str, Any]): The parameters for the tool
-        
+        query: The specific question or search query
+        api_key: API key for OpenRouter
+        api_url: API URL for OpenRouter
+    
     Returns:
-        Any: The result of the tool execution
+        str: Research findings with citations
+    """
+    try:
+        return _ask_perplexity(query, api_key, api_url)
+    except Exception as e:
+        return f"Error performing web research: {str(e)}"
+
+def _ask_perplexity(
+    question: str,
+    api_key: str,
+    api_url: str
+) -> str:
+    """
+    Ask a question using Perplexity via OpenRouter.
+    """
+    try:
+        response = requests.post(
+            api_url,
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'perplexity/llama-3.1-sonar-large-128k-online',
+                'messages': [{'role': 'user', 'content': question}],
+                'max_tokens': 1024,
+                'temperature': 0.7
+            },
+            timeout=60
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        
+        if 'choices' in result:
+            return result['choices'][0]['message']['content']
+        elif 'response' in result:
+            return result['response']
+        else:
+            raise ValueError(f"Unexpected API response format: {result}")
+            
+    except Exception as e:
+        raise Exception(f"Error querying Perplexity: {str(e)}")
+
+def execute_tool(tool_name: str, parameters: Dict[str, Any], api_key: str = None, model: str = None, api_url: str = None) -> Any:
+    """
+    Execute the specified tool with the given parameters.
     """
     tools = {
         "calculator": calculator,
-        "python": python_interpreter
+        "python": python_interpreter,
+        "web_research": web_research
     }
     
     if tool_name not in tools:
         raise ValueError(f"Unknown tool: {tool_name}")
         
     tool_func = tools[tool_name]
+    
+    # For web_research, inject the current API credentials
+    if tool_name == "web_research":
+        parameters = {**parameters, "api_key": api_key, "api_url": api_url}
+    
     return tool_func(**parameters) 

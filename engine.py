@@ -108,11 +108,20 @@ def thinking_loop(
             "<INSTRUCTIONS>\n"
             "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
             "Each individual reasoning step should be brief.\n"
-            "You have access to two tools:\n"
+            "You have access to three tools:\n"
             "1. calculator: For mathematical calculations\n"
-            "2. python: For executing Python code\n"
+            "2. web_research: Search the web for information using Perplexity\n"
+            "3. python: For executing Python code\n"
             "When you need to perform calculations, use the calculator tool.\n"
             "When you need to write or test Python code, use the python tool.\n"
+            "When you need to search the web for information, use the web_research tool.\n"
+            "When searching the web:\n"
+            "- The web_research tool uses human MTurk workers who do quick research and return what they find\n"
+            "- Only ask simple, factual questions that can be directly looked up\n" 
+            "- Queries must be single, straightforward questions - no compound questions\n"
+            "- Do not ask workers to make logical inferences or analyze information\n"
+            "- If a query is rejected, simplify it to ask for just one basic fact\n"
+            "- Keep queries focused on finding specific, verifiable information\n"
             "\nWhen writing Python code:\n"
             "- If your code produces an error, add print statements to debug the issue\n"
             "- Use assertions/prints to validate inputs, intermediate results, and outputs\n"
@@ -137,7 +146,7 @@ def thinking_loop(
             'role': 'user',
             'content': (
                 'Think about your next reasoning step to perform the CURRENT_TASK. '
-                'Return just the next step. If you need to calculate something, use the calculator tool. '
+                'Return just the next step. '
                 'Remember, steps should be very brief. '
                 'If this is the final step, return <DONE>.'
             )
@@ -205,7 +214,13 @@ def thinking_loop(
                         print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
                         print(f"{Fore.YELLOW}│ Arguments: {Style.RESET_ALL}{json.dumps(arguments, indent=2)}")
                     
-                    result = execute_tool(tool_name, arguments)
+                    result = execute_tool(
+                        tool_name, 
+                        arguments,
+                        api_key=api_key,
+                        model=model,
+                        api_url=api_url
+                    )
                     
                     # Add tool result to both histories
                     tool_message = {
@@ -316,6 +331,23 @@ def complete_reasoning_task(
                     "required": ["code"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_research",
+                "description": "Ask a human to find an answer to a specific question using the web. Returns findings with citations.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The specific question"
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
         }
     ]
 
@@ -336,7 +368,7 @@ def complete_reasoning_task(
     # Add final completion request
     final_user_message = {
         'role': 'user',
-        'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer. Do not use any tools, just respond with your final answer.'
+        'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
     }
     conversation_history.append(final_user_message)
 
