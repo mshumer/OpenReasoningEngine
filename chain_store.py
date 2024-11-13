@@ -152,7 +152,6 @@ def prepare_examples_messages(similar_chains: List[Dict], current_tools: List[Di
                 "<INSTRUCTIONS>\n"
                 "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
                 "Each individual reasoning step should be brief.\n"
-                "When you need to perform calculations, use the calculator tool.\n"
                 "Return <DONE> after the last step."
             )
         })

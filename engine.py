@@ -2,7 +2,7 @@ import os
 import requests
 from typing import List, Dict, Optional, Tuple
 from colorama import init, Fore, Style
-from tools import execute_tool
+from tools import execute_tool, clear_interpreter_state
 import json
 from datetime import datetime
 from chain_store import (
@@ -81,7 +81,8 @@ def thinking_loop(
     api_url: str = 'https://api.openai.com/v1/chat/completions',
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
-    wolfram_app_id: Optional[str] = None
+    wolfram_app_id: Optional[str] = None,
+    max_reasoning_steps: Optional[int] = None
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -93,6 +94,8 @@ def thinking_loop(
     if verbose:
         print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}│ Starting Thinking Loop{Style.RESET_ALL}")
+        if max_reasoning_steps:
+            print(f"{Fore.MAGENTA}│ Maximum steps: {max_reasoning_steps}{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Get similar chains if chain_store_api_key is provided
@@ -104,13 +107,12 @@ def thinking_loop(
     # Create the system message for the current task
     tools_description = (
         "You have access to these tools:\n"
-        "1. calculator: For mathematical calculations\n"
-        "2. web_research: Search the web for information using Perplexity\n"
-        "3. python: For executing Python code"
+        "1. find_datapoint_on_web: Search the web for information using Perplexity\n"
+        "2. python: For executing Python code"
     )
     
     if wolfram_app_id:
-        tools_description += "\n4. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
+        tools_description += "\n3. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
     
     system_message = {
         'role': 'system',
@@ -120,20 +122,20 @@ def thinking_loop(
             "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
             "Each individual reasoning step should be brief.\n"
             f"{tools_description}\n\n"
-            "When you need to perform calculations, use the calculator tool.\n"
             "When you need to write or test Python code, use the python tool.\n"
-            "When you need to search the web for information, use the web_research tool.\n"
+            "When you need to search the web for information, use the find_datapoint_on_web tool.\n"
             + (
                 "When you need precise mathematical or scientific computations, use the wolfram tool.\n"
                 if wolfram_app_id else ""
             ) +
             "\nWhen searching the web:\n"
-            "- The web_research tool uses human MTurk workers who do quick research and return what they find\n"
+            "- The find_datapoint_on_web tool uses human MTurk workers who do quick research and return what they find\n"
             "- Only ask simple, factual questions that can be directly looked up\n" 
             "- Queries must be single, straightforward questions - no compound questions\n"
             "- Do not ask workers to make logical inferences or analyze information\n"
             "- If a query is rejected, simplify it to ask for just one basic fact\n"
             "- Keep queries focused on finding specific, verifiable information\n"
+            "- If the worker notes data isn't directly available or makes logic jumps, break down into simpler questions to get just the raw facts and do the analysis yourself\n"
             "\nWhen writing Python code:\n"
             "- If your code produces an error, add print statements to debug the issue\n"
             "- Use assertions/prints to validate inputs, intermediate results, and outputs\n"
@@ -156,6 +158,65 @@ def thinking_loop(
     full_conversation_history = example_messages + [system_message]
 
     while continue_loop:
+        # Check if we've exceeded max steps
+        if max_reasoning_steps and step_count > max_reasoning_steps:
+            if verbose:
+                print(f"\n{Fore.YELLOW}Maximum reasoning steps ({max_reasoning_steps}) reached. Forcing completion.{Style.RESET_ALL}")
+            
+            # Add a system message explaining the forced stop
+            force_stop_message = {
+                'role': 'system',
+                'content': (
+                    f"Maximum reasoning steps ({max_reasoning_steps}) reached. "
+                )
+            }
+            conversation_history.append(force_stop_message)
+            full_conversation_history.append(force_stop_message)
+            
+            # Add a user message requesting the final answer
+            final_user_message = {
+                'role': 'user',
+                'content': (
+                    'Based on your reasoning so far, provide your final answer to the CURRENT_TASK. '
+                    'Make your response complete and self-contained since this will be shown to the user.'
+                    "Please provide your final answer based on what you've learned so far. "
+                    "Do not return <DONE>, and **you are not allowed to use any tools**. Just respond with your final answer."
+                )
+            }
+            conversation_history.append(final_user_message)
+            full_conversation_history.append(final_user_message)
+            
+            # Get final response when hitting max steps
+            response = send_message_to_api(
+                task,
+                full_conversation_history,
+                api_key,
+                tools,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose
+            )
+            print('Final response:', response)
+            
+            # Add the final response to histories
+            assistant_message = {
+                'role': 'assistant',
+                'content': response.get('content'),
+                'tool_calls': response.get('tool_calls', None)
+            }
+            conversation_history.append(assistant_message)
+            full_conversation_history.append(assistant_message)
+            
+            if verbose and response.get('content'):
+                print(f"\n{Fore.GREEN}Final Response after max steps:{Style.RESET_ALL}")
+                print(response.get('content'))
+            
+            # Return here to skip the additional final response request
+            return full_conversation_history
+
         if verbose:
             print(f"\n{Fore.BLUE}Step {step_count}{Style.RESET_ALL}")
             print(f"{Fore.BLUE}{'─' * 40}{Style.RESET_ALL}")
@@ -238,6 +299,7 @@ def thinking_loop(
                     result = execute_tool(
                         tool_name, 
                         arguments,
+                        task=task,
                         api_key=api_key,
                         model=model,
                         api_url=api_url,
@@ -305,12 +367,15 @@ def complete_reasoning_task(
     verbose: bool = False,
     log_conversation: bool = False,
     chain_store_api_key: Optional[str] = None,
-    wolfram_app_id: Optional[str] = None
+    wolfram_app_id: Optional[str] = None,
+    max_reasoning_steps: Optional[int] = None
 ) -> Tuple[str, List[Dict], List[Dict]]:
     """
-    Complete a task using the step-by-step thinking process.
-    Returns both the final response and the conversation history.
+    Execute the reasoning task and return the final response.
     """
+    # Clear Python interpreter state for just this task
+    clear_interpreter_state(task=task)
+    
     if api_key is None:
         raise ValueError('API key not provided.')
 
@@ -326,36 +391,14 @@ def complete_reasoning_task(
         {
             "type": "function",
             "function": {
-                "name": "calculator",
-                "description": "Perform mathematical calculations",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "operation": {
-                            "type": "string",
-                            "description": "The mathematical expression to evaluate (e.g., '2 + 2' or '1000 * (1 + 0.05) ** 5')"
-                        }
-                    },
-                    "required": ["operation"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
                 "name": "python",
-                "description": "Execute Python code and return the output. Use thread_id to maintain state across calls.",
+                "description": "Execute Python code and return the output.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "code": {
                             "type": "string",
                             "description": "The Python code to execute"
-                        },
-                        "thread_id": {
-                            "type": "string",
-                            "description": "Identifier for the execution thread. Use the same ID to maintain state across calls.",
-                            "default": "default"
                         },
                         "timeout": {
                             "type": "integer",
@@ -370,8 +413,8 @@ def complete_reasoning_task(
         {
             "type": "function",
             "function": {
-                "name": "web_research",
-                "description": "Ask a human to find an answer to a specific question using the web. Returns findings with citations.",
+                "name": "find_datapoint_on_web",
+                "description": "Search the web for a datapoint using Perplexity. Returns findings with citations.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -431,32 +474,44 @@ def complete_reasoning_task(
         api_url,
         verbose,
         chain_store_api_key=chain_store_api_key,
-        wolfram_app_id=wolfram_app_id
+        wolfram_app_id=wolfram_app_id,
+        max_reasoning_steps=max_reasoning_steps
     )
 
-    # Add final completion request
-    final_user_message = {
-        'role': 'user',
-        'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
-    }
-    conversation_history.append(final_user_message)
+    # Only request final response if we didn't hit max steps
+    final_response = None
+    if not max_reasoning_steps or len([m for m in conversation_history if m['role'] == 'system' and 'Maximum reasoning steps' in m.get('content', '')]) == 0:
+        # Add final completion request
+        final_user_message = {
+            'role': 'user',
+            'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
+        }
+        conversation_history.append(final_user_message)
 
-    if verbose:
-        print(f"{Fore.CYAN}Requesting final response...{Style.RESET_ALL}\n")
+        if verbose:
+            print(f"{Fore.CYAN}Requesting final response...{Style.RESET_ALL}\n")
 
-    # Get final response
-    final_response = send_message_to_api(
-        task,
-        conversation_history,
-        api_key,
-        tools,
-        model,
-        temperature,
-        top_p,
-        max_tokens,
-        api_url,
-        verbose
-    )
+        # Get final response
+        final_response = send_message_to_api(
+            task,
+            conversation_history,
+            api_key,
+            tools,
+            model,
+            temperature,
+            top_p,
+            max_tokens,
+            api_url,
+            verbose
+        )
+        print('Proper final response:', final_response)
+    else:
+        # Use the last assistant message as the final response
+        final_response = next(
+            (msg for msg in reversed(conversation_history) 
+             if msg['role'] == 'assistant' and msg.get('content')),
+            {'content': None}
+        )
 
     # Print final response if verbose
     if verbose and 'content' in final_response:

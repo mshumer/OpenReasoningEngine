@@ -11,7 +11,12 @@ def run_agent(
     task: str,
     agent_config: Dict[str, str],
     verbose: bool = False,
-    chain_store_api_key: Optional[str] = None
+    chain_store_api_key: Optional[str] = None,
+    max_reasoning_steps: Optional[int] = None,
+    wolfram_app_id: Optional[str] = None,
+    default_temperature: float = 0.7,
+    top_p: float = 1.0,
+    max_tokens: int = 500
 ) -> Tuple[Dict[str, str], str, List[Dict], List[Dict]]:
     """
     Run a single agent with the given configuration.
@@ -21,12 +26,23 @@ def run_agent(
         agent_config: Dictionary containing 'model', 'api_key', and 'api_url'
         verbose: Whether to show detailed output
         chain_store_api_key: API key for chain store if using
+        max_reasoning_steps: Maximum number of reasoning steps for this agent
+        wolfram_app_id: Wolfram Alpha app ID if using
+        default_temperature: Default temperature for the model if using
+        top_p: Top p for the model if using
+        max_tokens: Maximum number of tokens for the model if using
     
     Returns:
         Tuple of (agent_config, final_response, conversation_history, tools)
     """
+    # Reinitialize colorama for this process
+    init(autoreset=True)
+    
     if verbose:
         print(f"\n{Fore.CYAN}Running agent with model: {Style.RESET_ALL}{agent_config['model']}")
+        if max_reasoning_steps:
+            print(f"{Fore.CYAN}Max steps: {Style.RESET_ALL}{max_reasoning_steps}")
+        print(f"{Fore.CYAN}Temperature: {Style.RESET_ALL}{agent_config.get('temperature', default_temperature)}")
     
     response, history, tools = complete_reasoning_task(
         task=task,
@@ -34,10 +50,15 @@ def run_agent(
         model=agent_config['model'],
         api_url=agent_config['api_url'],
         verbose=verbose,
-        chain_store_api_key=chain_store_api_key
+        chain_store_api_key=chain_store_api_key,
+        max_reasoning_steps=max_reasoning_steps,
+        wolfram_app_id=wolfram_app_id,
+        temperature=agent_config.get('temperature', default_temperature),
+        top_p=top_p,
+        max_tokens=max_tokens
     )
 
-    # Remove example chains from conversation history by removing everything prior to the bottom-most system message
+    # Remove example chains from conversation history
     bottom_system_message_index = next((i for i, msg in enumerate(reversed(history)) if msg.get('role') == 'system'), None)
     if bottom_system_message_index is not None:
         history = history[-bottom_system_message_index:]
@@ -72,7 +93,12 @@ def run_agents_parallel(
     agents: List[Dict[str, str]],
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
-    max_workers: Optional[int] = None
+    max_workers: Optional[int] = None,
+    max_reasoning_steps: Optional[int] = None,
+    wolfram_app_id: Optional[str] = None,
+    temperature: float = 0.7,
+    top_p: float = 1.0,
+    max_tokens: int = 500
 ) -> List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]:
     """Run multiple agents in parallel."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -83,7 +109,12 @@ def run_agents_parallel(
                 task, 
                 agent,
                 verbose,
-                chain_store_api_key
+                chain_store_api_key,
+                max_reasoning_steps,
+                wolfram_app_id,
+                temperature,
+                top_p,
+                max_tokens
             ): agent for agent in agents
         }
         
@@ -107,7 +138,13 @@ def ensemble(
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
     max_workers: Optional[int] = None,
-    return_reasoning: bool = False
+    return_reasoning: bool = False,
+    max_reasoning_steps: Optional[int] = None,
+    coordinator_max_steps: Optional[int] = None,
+    wolfram_app_id: Optional[str] = None,
+    temperature: float = 0.7,
+    top_p: float = 1.0,
+    max_tokens: int = 500
 ) -> Union[str, Tuple[str, List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]]]:
     """
     Run multiple agents in parallel and coordinate their responses.
@@ -120,30 +157,44 @@ def ensemble(
         chain_store_api_key: API key for chain store if using
         max_workers: Maximum number of parallel workers
         return_reasoning: Whether to return the full reasoning chains
-    
-    Returns:
-        If return_reasoning is False: Final coordinated response (str)
-        If return_reasoning is True: Tuple of (final response, list of agent results)
+        max_reasoning_steps: Maximum steps for each agent
+        coordinator_max_steps: Maximum steps for the coordinator (can be different from agents)
+        wolfram_app_id: Wolfram Alpha app ID if using
+        temperature: Default temperature for the model if using
+        top_p: Top p for the model if using
+        max_tokens: Maximum number of tokens for the model if using
     """
+    # Reinitialize colorama for the main process
+    init(autoreset=True)
+    
     if verbose:
         print(f"\n{Fore.MAGENTA}Starting Ensemble for task:{Style.RESET_ALL}")
         print(f"{task}\n")
         print(f"{Fore.MAGENTA}Using {len(agents)} agents in parallel{Style.RESET_ALL}")
+        print(f"{Fore.MAGENTA}Default temperature: {temperature}{Style.RESET_ALL}")
+        for agent in agents:
+            if 'temperature' in agent:
+                print(f"{Fore.MAGENTA}Temperature for {agent['model']}: {agent['temperature']}{Style.RESET_ALL}")
     
-    # Run all agents in parallel
+    # Run all agents in parallel with max steps
     agent_results = run_agents_parallel(
         task,
         agents,
         verbose,
         chain_store_api_key,
-        max_workers
+        max_workers,
+        max_reasoning_steps,
+        wolfram_app_id,
+        temperature,
+        top_p,
+        max_tokens
     )
     
     # Format results for coordinator
     formatted_results = format_agent_results(agent_results)
     
     # Create coordinator prompt
-    coordinator_task = f"""You are a coordinator model tasked with analyzing multiple AI responses to the following task:
+    coordinator_task = f"""You are a coordinator model tasked with analyzing multiple AI responses to the following question:
 
 Question: {task}
 
@@ -157,7 +208,7 @@ Please analyze all responses and their reasoning steps carefully. Consider:
 3. The correctness of calculations and tool usage
 4. The clarity and completeness of the final response
 
-Based on your analysis, synthesize these responses into a single, high-quality response to the question. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the question. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability."""
+Based on your analysis, synthesize these responses into a single, high-quality response to the question. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the question. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability. Also remember that the user is only going to see your final answer, so make sure it's complete and self-contained, and actually answers the question."""
 
     # Get coordinator's response
     if verbose:
@@ -169,7 +220,12 @@ Based on your analysis, synthesize these responses into a single, high-quality r
         model=coordinator['model'],
         api_url=coordinator['api_url'],
         verbose=verbose,
-        chain_store_api_key=None  # Don't use chain store for coordinator
+        chain_store_api_key=None,
+        max_reasoning_steps=coordinator_max_steps,
+        wolfram_app_id=wolfram_app_id,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens
     )
     
     if return_reasoning:

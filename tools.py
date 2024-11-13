@@ -5,116 +5,175 @@ import sys
 from io import StringIO
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
-from collections import defaultdict
 import json
-import wolframalpha  # pip install wolframalpha
+import wolframalpha
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import sympy
+import scipy
+import sklearn
+from sympy import symbols, solve, simplify
+from scipy import stats
+from sklearn import preprocessing
+import math
 
-# Store for interpreter states
-interpreter_states = defaultdict(dict)
+# Dictionary of interpreter states, keyed by task hash
+interpreter_states = {}
 
-def calculator(operation: str) -> float:
+def get_task_hash(task: str) -> str:
+    """Generate a unique hash for a task."""
+    import hashlib
+    return hashlib.md5(task.encode()).hexdigest()
+
+def clear_interpreter_state(task: str = None):
     """
-    A simple calculator that evaluates mathematical expressions.
-    
-    Args:
-        operation (str): A mathematical expression as a string (e.g., "2 + 2")
-        
-    Returns:
-        float: The result of the calculation
+    Clear the interpreter state.
+    If task is provided, only clear that task's state.
+    If no task is provided, clear all states.
     """
-    try:
-        # Replace ^ with ** for exponentiation
-        operation = operation.replace('^', '**')
-        # Using eval() is generally not safe for production, but for this demo it's ok
-        result = eval(operation)
-        return float(result)
-    except Exception as e:
-        raise ValueError(
-            f"Invalid calculation: {str(e)}\n"
-            "Hint: For exponents, use ** instead of ^. For example:\n"
-            "- Correct: 7.35 * (10 ** 22)\n"
-            "- Correct: 7.35e22\n"
-            "- Incorrect: 7.35 * 10^22"
-        )
+    global interpreter_states
+    if task:
+        task_hash = get_task_hash(task)
+        if task_hash in interpreter_states:
+            del interpreter_states[task_hash]
+    else:
+        interpreter_states = {}
 
-def python_interpreter(code: str, thread_id: str = "default", timeout: int = 5) -> str:
+def python_interpreter(code: str, task: str, timeout: int = 5) -> str:
     """
     Safely execute Python code in a restricted environment.
-    Maintains state across calls if the same thread_id is used.
-    
-    Args:
-        code (str): Python code to execute
-        thread_id (str): Identifier for the execution thread to maintain state
-        timeout (int): Maximum execution time in seconds
-        
-    Returns:
-        str: Output of the code execution (stdout + stderr)
+    Maintains separate state for each task.
     """
     stdout = StringIO()
     stderr = StringIO()
     
     try:
-        # Get or create state for this thread
-        local_dict = interpreter_states[thread_id]
+        # Get task-specific state
+        task_hash = get_task_hash(task)
+        if task_hash not in interpreter_states:
+            interpreter_states[task_hash] = {}
+            
+        state = interpreter_states[task_hash]
+        
+        # Initialize state if empty
+        if not state:
+            # Configure matplotlib to use non-interactive backend
+            import matplotlib
+            matplotlib.use('Agg')
+            
+            state.update({
+                'np': np,
+                'pd': pd,
+                'plt': plt,
+                'sns': sns,
+                'sympy': sympy,
+                'symbols': symbols,
+                'solve': solve,
+                'simplify': simplify,
+                'scipy': scipy,
+                'stats': stats,
+                'sklearn': sklearn,
+                'preprocessing': preprocessing,
+                'math': math,
+                'log': math.log,
+                'sin': math.sin,
+                'cos': math.cos,
+                'tan': math.tan,
+                'pi': math.pi,
+                'e': math.e,
+                'sqrt': math.sqrt,
+                'exp': math.exp
+            })
+        
+        # Take snapshot of state before execution
+        pre_exec_state = {k: str(v) for k, v in state.items()}
         
         # Redirect stdout and stderr
         with redirect_stdout(stdout), redirect_stderr(stderr):
             try:
-                # Execute the code with the thread's state
-                exec(code, {"__builtins__": __builtins__}, local_dict)
-            except AssertionError as ae:
-                # Special handling for assertion errors to make them more informative
-                return f"Assertion Error: {str(ae)}\nThis indicates a condition you were checking for failed. Review the assertion and the values being tested."
+                # Execute the code with the state
+                exec_result = eval(code, {"__builtins__": __builtins__}, state)
+                
+                # If there's a return value from eval, print it
+                if exec_result is not None:
+                    print(f"Result: {exec_result}")
+                    
+            except SyntaxError:
+                # If eval fails (e.g., for statements), fall back to exec
+                exec(code, {"__builtins__": __builtins__}, state)
             except Exception as e:
-                # For other errors, provide debugging suggestions
                 error_msg = (
                     f"Error executing code: {str(e)}\n"
                     f"Traceback:\n{traceback.format_exc()}\n"
                     "\nDebugging Suggestions:\n"
-                    "1. Add assert statements to check variable values\n"
-                    "2. Print intermediate results\n"
-                    "3. Verify input types and values\n"
-                    "4. Check for edge cases\n"
-                    "\nExample:\n"
-                    "assert isinstance(your_list, list), f'Expected list, got {type(your_list)}'\n"
-                    "assert all(isinstance(x, (int, float)) for x in your_list), 'All elements must be numbers'\n"
-                    "assert len(your_list) > 0, 'List cannot be empty'"
+                    "1. Add print statements to debug the issue\n"
+                    "2. Use assertions to validate inputs and outputs\n"
+                    "3. Check variable types with print(type(var))\n"
+                    "4. For numerical computations, verify inputs are numbers\n"
+                    "5. For symbolic math, ensure variables are properly defined with symbols()\n"
+                    "\nNote: Plotting is currently not supported. Instead of visualizing data, consider:\n"
+                    "1. Printing key numerical results\n"
+                    "2. Showing data statistics\n"
+                    "3. Printing array slices or samples\n"
+                    "\nAvailable packages:\n"
+                    "- numpy (np): Numerical computing\n"
+                    "- pandas (pd): Data manipulation\n"
+                    "- sympy: Symbolic mathematics\n"
+                    "- scipy: Scientific computing\n"
+                    "- sklearn: Machine learning"
                 )
                 return error_msg
-            
-        # Save the updated state
-        interpreter_states[thread_id] = local_dict
             
         # Get the output
         output = stdout.getvalue()
         errors = stderr.getvalue()
         
         # Combine output and errors
-        result = ""
+        result = []
         if output:
-            result += f"Output:\n{output}"
+            result.append(f"Output:\n{output.rstrip()}")
         if errors:
-            if result:
-                result += "\n"
-            result += f"Errors:\n{errors}"
+            result.append(f"Errors:\n{errors.rstrip()}")
         
-        # Add state information to the result
-        state_vars = [f"{k}: {type(v).__name__}" for k, v in local_dict.items() 
-                     if not k.startswith('__')]
-        if state_vars:
-            if result:
-                result += "\n"
-            result += f"\nThread state variables:\n{', '.join(state_vars)}"
+        # Track new and modified variables
+        new_vars = {}
+        modified_vars = {}
+        excluded_vars = {
+            'np', 'pd', 'plt', 'sns', 'sympy', 'scipy', 'sklearn',
+            'symbols', 'solve', 'simplify', 'stats', 'preprocessing',
+            'math', 'log', 'sin', 'cos', 'tan', 'pi', 'e', 'sqrt', 'exp'
+        }
+        
+        for k, v in state.items():
+            if not k.startswith('__') and k not in excluded_vars:
+                str_val = str(v)
+                if len(str_val) > 1500:
+                    str_val = str_val[:1500] + "..."
+                    
+                if k not in pre_exec_state:
+                    new_vars[k] = f"{type(v).__name__} = {str_val}"
+                elif pre_exec_state[k] != str_val:
+                    modified_vars[k] = f"{type(v).__name__} = {str_val}"
+        
+        # Add variable information to result
+        if new_vars:
+            result.append(f"New variables:\n{', '.join(f'{k}: {v}' for k, v in new_vars.items())}")
+        if modified_vars:
+            result.append(f"Modified variables:\n{', '.join(f'{k}: {v}' for k, v in modified_vars.items())}")
             
-        return result if result else "Code executed successfully with no output."
+        return "\n\n".join(result) if result else "Code executed successfully with no output."
         
     except Exception as e:
         return f"Error executing code: {str(e)}\n{traceback.format_exc()}"
     finally:
         stdout.close()
         stderr.close()
+        if 'plt' in locals():
+            plt.close('all')
 
-def web_research(
+def find_datapoint_on_web(
     query: str,
     api_key: str = None,
     api_url: str = "https://openrouter.ai/api/v1/chat/completions"
@@ -209,14 +268,13 @@ def wolfram(
     except Exception as e:
         return f"Error querying Wolfram Alpha: {str(e)}"
 
-def execute_tool(tool_name: str, parameters: Dict[str, Any], api_key: str = None, model: str = None, api_url: str = None, wolfram_app_id: str = None) -> Any:
+def execute_tool(tool_name: str, parameters: Dict[str, Any], task: str = None, api_key: str = None, model: str = None, api_url: str = None, wolfram_app_id: str = None) -> Any:
     """
     Execute the specified tool with the given parameters.
     """
     tools = {
-        "calculator": calculator,
         "python": python_interpreter,
-        "web_research": web_research,
+        "find_datapoint_on_web": find_datapoint_on_web,
         "wolfram": wolfram
     }
     
@@ -225,8 +283,14 @@ def execute_tool(tool_name: str, parameters: Dict[str, Any], api_key: str = None
         
     tool_func = tools[tool_name]
     
-    # Inject appropriate credentials
-    if tool_name == "web_research":
+    # Remove thread_id from parameters if it exists
+    if 'thread_id' in parameters:
+        del parameters['thread_id']
+    
+    # Inject appropriate credentials and task
+    if tool_name == "python":
+        parameters = {**parameters, "task": task}
+    elif tool_name == "find_datapoint_on_web":
         parameters = {**parameters, "api_key": api_key, "api_url": api_url}
     elif tool_name == "wolfram":
         parameters = {**parameters, "wolfram_app_id": wolfram_app_id}

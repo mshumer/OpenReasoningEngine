@@ -20,7 +20,9 @@ def reason():
         "top_p": 1.0,                 # optional
         "max_tokens": 500,            # optional
         "verbose": false,             # optional
-        "chain_store_api_key": "key"  # optional
+        "chain_store_api_key": "key", # optional
+        "wolfram_app_id": "key",      # optional
+        "max_reasoning_steps": 10      # optional
     }
     """
     try:
@@ -43,6 +45,8 @@ def reason():
         max_tokens = data.get('max_tokens', 500)
         verbose = data.get('verbose', False)
         chain_store_api_key = data.get('chain_store_api_key')
+        wolfram_app_id = data.get('wolfram_app_id')
+        max_reasoning_steps = data.get('max_reasoning_steps')
         
         # Run reasoning
         response, history, tools = complete_reasoning_task(
@@ -54,7 +58,9 @@ def reason():
             top_p=top_p,
             max_tokens=max_tokens,
             verbose=verbose,
-            chain_store_api_key=chain_store_api_key
+            chain_store_api_key=chain_store_api_key,
+            wolfram_app_id=wolfram_app_id,
+            max_reasoning_steps=max_reasoning_steps
         )
         
         return jsonify({
@@ -81,23 +87,32 @@ def run_ensemble():
             {
                 "model": "model-name-1",
                 "api_key": "key-1",
-                "api_url": "url-1"
+                "api_url": "url-1",
+                "temperature": "temperature-1",
             },
             {
                 "model": "model-name-2",
                 "api_key": "key-2",
-                "api_url": "url-2"
+                "api_url": "url-2",
+                "temperature": "temperature-2"
             }
         ],
         "coordinator": {
             "model": "model-name",
             "api_key": "key",
-            "api_url": "url"
+            "api_url": "url",
+            "temperature": "temperature"
         },
         "verbose": false,             # optional
         "chain_store_api_key": "key", # optional
         "max_workers": 3,             # optional
-        "return_reasoning": false     # optional
+        "return_reasoning": false,    # optional
+        "max_reasoning_steps": 10,    # optional: max steps per agent
+        "coordinator_max_steps": 5,   # optional: max steps for coordinator
+        "wolfram_app_id": "key",      # optional
+        "temperature": 0.7,           # optional
+        "top_p": 1.0,                # optional
+        "max_tokens": 500            # optional
     }
     """
     try:
@@ -118,6 +133,12 @@ def run_ensemble():
         chain_store_api_key = data.get('chain_store_api_key')
         max_workers = data.get('max_workers')
         return_reasoning = data.get('return_reasoning', False)
+        max_reasoning_steps = data.get('max_reasoning_steps')
+        coordinator_max_steps = data.get('coordinator_max_steps')
+        wolfram_app_id = data.get('wolfram_app_id')
+        temperature = data.get('temperature', 0.7)
+        top_p = data.get('top_p', 1.0)
+        max_tokens = data.get('max_tokens', 500)
         
         # Run ensemble
         result = ensemble(
@@ -127,7 +148,13 @@ def run_ensemble():
             verbose=verbose,
             chain_store_api_key=chain_store_api_key,
             max_workers=max_workers,
-            return_reasoning=return_reasoning
+            return_reasoning=return_reasoning,
+            max_reasoning_steps=max_reasoning_steps,
+            coordinator_max_steps=coordinator_max_steps,
+            wolfram_app_id=wolfram_app_id,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens
         )
         
         if return_reasoning:
@@ -155,4 +182,4 @@ def run_ensemble():
         }), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000) 
+    app.run(host='0.0.0.0', port=5050) 
