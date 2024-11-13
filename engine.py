@@ -80,7 +80,8 @@ def thinking_loop(
     max_tokens: int = 500,
     api_url: str = 'https://api.openai.com/v1/chat/completions',
     verbose: bool = False,
-    chain_store_api_key: Optional[str] = None
+    chain_store_api_key: Optional[str] = None,
+    wolfram_app_id: Optional[str] = None
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -101,6 +102,16 @@ def thinking_loop(
         example_messages = prepare_examples_messages(similar_chains, tools)
 
     # Create the system message for the current task
+    tools_description = (
+        "You have access to these tools:\n"
+        "1. calculator: For mathematical calculations\n"
+        "2. web_research: Search the web for information using Perplexity\n"
+        "3. python: For executing Python code"
+    )
+    
+    if wolfram_app_id:
+        tools_description += "\n4. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
+    
     system_message = {
         'role': 'system',
         'content': (
@@ -108,14 +119,15 @@ def thinking_loop(
             "<INSTRUCTIONS>\n"
             "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
             "Each individual reasoning step should be brief.\n"
-            "You have access to three tools:\n"
-            "1. calculator: For mathematical calculations\n"
-            "2. web_research: Search the web for information using Perplexity\n"
-            "3. python: For executing Python code\n"
+            f"{tools_description}\n\n"
             "When you need to perform calculations, use the calculator tool.\n"
             "When you need to write or test Python code, use the python tool.\n"
             "When you need to search the web for information, use the web_research tool.\n"
-            "When searching the web:\n"
+            + (
+                "When you need precise mathematical or scientific computations, use the wolfram tool.\n"
+                if wolfram_app_id else ""
+            ) +
+            "\nWhen searching the web:\n"
             "- The web_research tool uses human MTurk workers who do quick research and return what they find\n"
             "- Only ask simple, factual questions that can be directly looked up\n" 
             "- Queries must be single, straightforward questions - no compound questions\n"
@@ -128,6 +140,13 @@ def thinking_loop(
             "- Print the state to see what's happening\n"
             "- When an error occurs, systematically add checks to identify where the problem is\n"
             "- Structure your debugging process step by step\n"
+            + (
+                "\nWhen using Wolfram Alpha:\n"
+                "- Use for precise mathematical calculations and scientific data\n"
+                "- Phrase queries clearly and specifically\n"
+                "- Great for unit conversions, equations, and factual data\n"
+                if wolfram_app_id else ""
+            ) +
             "\nReturn <DONE> after the last step.\n"
             "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
         )
@@ -198,17 +217,19 @@ def thinking_loop(
                     # Add error handling for argument parsing
                     try:
                         if 'arguments' not in tool_call['function'] or not tool_call['function']['arguments']:
+                            error_msg = "No arguments provided in tool call"
                             if verbose:
-                                print(f"{Fore.RED}No arguments provided in tool call{Style.RESET_ALL}")
-                            continue
+                                print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
+                            raise ValueError(error_msg)
                             
                         arguments = json.loads(tool_call['function']['arguments'])
                         
                     except json.JSONDecodeError as e:
+                        error_msg = f"Invalid JSON in tool arguments: {tool_call['function'].get('arguments', 'NO_ARGS')}"
                         if verbose:
-                            print(f"{Fore.RED}Invalid JSON in tool arguments: {tool_call['function'].get('arguments', 'NO_ARGS')}{Style.RESET_ALL}")
+                            print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
                             print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
-                        continue
+                        raise ValueError(error_msg)
                     
                     if verbose:
                         print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
@@ -219,7 +240,8 @@ def thinking_loop(
                         arguments,
                         api_key=api_key,
                         model=model,
-                        api_url=api_url
+                        api_url=api_url,
+                        wolfram_app_id=wolfram_app_id
                     )
                     
                     # Add tool result to both histories
@@ -236,8 +258,20 @@ def thinking_loop(
                         print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
                 
                 except Exception as e:
+                    error_msg = str(e)
                     if verbose:
-                        print(f"{Fore.RED}Error executing tool: {str(e)}{Style.RESET_ALL}")
+                        print(f"{Fore.RED}Error executing tool: {error_msg}{Style.RESET_ALL}")
+                    
+                    # Add error message to conversation history so model can correct its approach
+                    error_message = {
+                        'role': 'system',
+                        'content': (
+                            f"Error using {tool_name} tool: {error_msg}\n"
+                            "Please correct your approach and try again."
+                        )
+                    }
+                    conversation_history.append(error_message)
+                    full_conversation_history.append(error_message)
                     continue
 
         # Check for termination conditions
@@ -270,8 +304,9 @@ def complete_reasoning_task(
     api_url: str = 'https://api.openai.com/v1/chat/completions',
     verbose: bool = False,
     log_conversation: bool = False,
-    chain_store_api_key: Optional[str] = None
-) -> Tuple[str, List[Dict]]:
+    chain_store_api_key: Optional[str] = None,
+    wolfram_app_id: Optional[str] = None
+) -> Tuple[str, List[Dict], List[Dict]]:
     """
     Complete a task using the step-by-step thinking process.
     Returns both the final response and the conversation history.
@@ -286,7 +321,7 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}│ {task}{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
-    # Define available tools
+    # Define base tools that are always available
     tools = [
         {
             "type": "function",
@@ -351,6 +386,39 @@ def complete_reasoning_task(
         }
     ]
 
+    # Add Wolfram tool only if wolfram_app_id is provided
+    if wolfram_app_id:
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": "wolfram",
+                "description": "Query Wolfram Alpha for computations, math, science, and knowledge. Great for mathematical analysis, scientific calculations, data analysis, and fact-checking.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The query to send to Wolfram Alpha. Be specific and precise."
+                        },
+                        "include_pods": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Optional list of pod names to include (e.g., ['Result', 'Solution', 'Plot']). Leave empty for all pods.",
+                            "default": None
+                        },
+                        "max_width": {
+                            "type": "integer",
+                            "description": "Maximum width for plots/images",
+                            "default": 1000
+                        }
+                    },
+                    "required": ["query"]
+                }
+            }
+        })
+
     # Run the thinking loop
     conversation_history = thinking_loop(
         task,
@@ -362,7 +430,8 @@ def complete_reasoning_task(
         max_tokens,
         api_url,
         verbose,
-        chain_store_api_key=chain_store_api_key
+        chain_store_api_key=chain_store_api_key,
+        wolfram_app_id=wolfram_app_id
     )
 
     # Add final completion request

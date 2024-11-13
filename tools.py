@@ -7,6 +7,7 @@ import traceback
 from contextlib import redirect_stdout, redirect_stderr
 from collections import defaultdict
 import json
+import wolframalpha  # pip install wolframalpha
 
 # Store for interpreter states
 interpreter_states = defaultdict(dict)
@@ -22,11 +23,19 @@ def calculator(operation: str) -> float:
         float: The result of the calculation
     """
     try:
+        # Replace ^ with ** for exponentiation
+        operation = operation.replace('^', '**')
         # Using eval() is generally not safe for production, but for this demo it's ok
         result = eval(operation)
         return float(result)
     except Exception as e:
-        raise ValueError(f"Invalid calculation: {str(e)}")
+        raise ValueError(
+            f"Invalid calculation: {str(e)}\n"
+            "Hint: For exponents, use ** instead of ^. For example:\n"
+            "- Correct: 7.35 * (10 ** 22)\n"
+            "- Correct: 7.35e22\n"
+            "- Incorrect: 7.35 * 10^22"
+        )
 
 def python_interpreter(code: str, thread_id: str = "default", timeout: int = 5) -> str:
     """
@@ -163,14 +172,52 @@ def _ask_perplexity(
     except Exception as e:
         raise Exception(f"Error querying Perplexity: {str(e)}")
 
-def execute_tool(tool_name: str, parameters: Dict[str, Any], api_key: str = None, model: str = None, api_url: str = None) -> Any:
+def wolfram(
+    query: str,
+    wolfram_app_id: str,
+    include_pods: List[str] = None,  # e.g., ["Result", "Solution", "Plot"]
+    max_width: int = 1000
+) -> str:
+    """
+    Query Wolfram Alpha for computations, math, science, and knowledge.
+    
+    Args:
+        query: The query to send to Wolfram Alpha
+        wolfram_app_id: Your Wolfram Alpha API key
+        include_pods: List of pod names to include in result (None for all)
+        max_width: Maximum width for plots/images
+    
+    Returns:
+        str: Formatted response from Wolfram Alpha
+    """
+    try:
+        client = wolframalpha.Client(wolfram_app_id)
+        res = client.query(query, width=max_width)
+        
+        # Format the response
+        result = []
+        for pod in res.pods:
+            # Skip if we're only interested in specific pods and this isn't one of them
+            if include_pods and pod.title not in include_pods:
+                continue
+                
+            if pod.title and pod.text:
+                result.append(f"{pod.title}:\n{pod.text}")
+        
+        return "\n\n".join(result) if result else "No results found"
+        
+    except Exception as e:
+        return f"Error querying Wolfram Alpha: {str(e)}"
+
+def execute_tool(tool_name: str, parameters: Dict[str, Any], api_key: str = None, model: str = None, api_url: str = None, wolfram_app_id: str = None) -> Any:
     """
     Execute the specified tool with the given parameters.
     """
     tools = {
         "calculator": calculator,
         "python": python_interpreter,
-        "web_research": web_research
+        "web_research": web_research,
+        "wolfram": wolfram
     }
     
     if tool_name not in tools:
@@ -178,8 +225,10 @@ def execute_tool(tool_name: str, parameters: Dict[str, Any], api_key: str = None
         
     tool_func = tools[tool_name]
     
-    # For web_research, inject the current API credentials
+    # Inject appropriate credentials
     if tool_name == "web_research":
         parameters = {**parameters, "api_key": api_key, "api_url": api_url}
+    elif tool_name == "wolfram":
+        parameters = {**parameters, "wolfram_app_id": wolfram_app_id}
     
     return tool_func(**parameters) 
