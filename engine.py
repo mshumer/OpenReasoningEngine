@@ -1,7 +1,7 @@
 import os
 import requests
 from e2b_code_interpreter import Sandbox
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 from colorama import init, Fore, Style
 from tools import execute_tool, clear_interpreter_state
 import json
@@ -391,10 +391,12 @@ def complete_reasoning_task(
     chain_store_api_key: Optional[str] = None,
     wolfram_app_id: Optional[str] = None,
     max_reasoning_steps: Optional[int] = None,
-    image: Optional[str] = None
-) -> Tuple[str, List[Dict], List[Dict]]:
+    image: Optional[str] = None,
+    output_tools: Optional[List[Dict]] = None
+) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
+    Now supports optional structured output via output_tools.
     """
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
@@ -417,8 +419,8 @@ def complete_reasoning_task(
     sandbox = Sandbox(timeout=timeout)
 
 
-    # Define base tools that are always available
-    tools = [
+    # Define thinking tools (internal tools that can be used during reasoning)
+    thinking_tools = [
         {
             "type": "function",
             "function": {
@@ -462,7 +464,7 @@ def complete_reasoning_task(
 
     # Add Wolfram tool only if wolfram_app_id is provided
     if wolfram_app_id:
-        tools.append({
+        thinking_tools.append({
             "type": "function",
             "function": {
                 "name": "wolfram",
@@ -493,11 +495,59 @@ def complete_reasoning_task(
             }
         })
 
-    # Run the thinking loop
+    # Add output tools description to system message
+    output_tools_description = ""
+    if output_tools:
+        output_tools_description = "\n\nWhen providing your final response, you can use these output functions (but you don't have access to them during reasoning steps):\n"
+        for tool in output_tools:
+            output_tools_description += f"- {tool['function']['name']}: {tool['function']['description']}\n"
+
+    # Modify system message to include output tools if provided
+    system_message = {
+        'role': 'system',
+        'content': (
+            f"<CURRENT_TASK>\n{task}\n\n"
+            "<INSTRUCTIONS>\n"
+            "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
+            "Each individual reasoning step should be brief.\n"
+            f"{output_tools_description}\n"  # Add output tools description if any
+            "When you need to write or test Python code, use the python tool.\n"
+            "When you need to search the web for information, use the find_datapoint_on_web tool.\n"
+            + (
+                "When you need precise mathematical or scientific computations, use the wolfram tool.\n"
+                if wolfram_app_id else ""
+            ) +
+            "\nWhen searching the web:\n"
+            "- The find_datapoint_on_web tool uses human MTurk workers who do quick research and return what they find\n"
+            "- Only ask simple, factual questions that can be directly looked up\n"
+            "- Queries must be single, straightforward questions - no compound questions\n"
+            "- Do not ask workers to make logical inferences or analyze information\n"
+            "- If a query is rejected, simplify it to ask for just one basic fact\n"
+            "- Keep queries focused on finding specific, verifiable information\n"
+            "- If the worker notes data isn't directly available or makes logic jumps, break down into simpler questions to get just the raw facts and do the analysis yourself\n"
+            "\nWhen writing Python code:\n"
+            "- If your code produces an error, add print statements to debug the issue\n"
+            "- Use assertions/prints to validate inputs, intermediate results, and outputs\n"
+            "- Print the state to see what's happening\n"
+            "- When an error occurs, systematically add checks to identify where the problem is\n"
+            "- Structure your debugging process step by step\n"
+            + (
+                "\nWhen using Wolfram Alpha:\n"
+                "- Use for precise mathematical calculations and scientific data\n"
+                "- Phrase queries clearly and specifically\n"
+                "- Great for unit conversions, equations, and factual data\n"
+                if wolfram_app_id else ""
+            ) +
+            "\nReturn <DONE> after the last step.\n"
+            "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
+        )
+    }
+
+    # Run thinking loop with only thinking tools
     conversation_history = thinking_loop(
         task,
         api_key,
-        tools,
+        thinking_tools,  # Pass only thinking tools here
         model,
         temperature,
         top_p,
@@ -517,19 +567,24 @@ def complete_reasoning_task(
         # Add final completion request
         final_user_message = {
             'role': 'user',
-            'content': 'Complete the <CURRENT_TASK>. Do not return <DONE>. Note that the user will only see what you return here. None of the steps you have taken will be shown to the user, so ensure you return the final answer.'
+            'content': (
+                'Complete the <CURRENT_TASK>. Do not return <DONE>. '
+                'Note that the user will only see what you return here. '
+                'None of the steps you have taken will be shown to the user, so ensure you return the final answer. '
+                + ('You can return a text response and/or use one of the available output functions.' if output_tools else '')
+            )
         }
         conversation_history.append(final_user_message)
 
         if verbose:
             print(f"{Fore.CYAN}Requesting final response...{Style.RESET_ALL}\n")
 
-        # Get final response
+        # Get final response with output tools if provided
         final_response = send_message_to_api(
             task,
             conversation_history,
             api_key,
-            tools,
+            output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
             model,
             temperature,
             top_p,
@@ -537,7 +592,6 @@ def complete_reasoning_task(
             api_url,
             verbose
         )
-        print('Proper final response:', final_response)
     else:
         # Use the last assistant message as the final response
         final_response = next(
@@ -547,11 +601,25 @@ def complete_reasoning_task(
         )
 
     # Print final response if verbose
-    if verbose and 'content' in final_response:
+    if verbose and ('content' in final_response or 'tool_calls' in final_response):
         print(f'\n{Fore.GREEN}Final Response:{Style.RESET_ALL}')
-        print(final_response['content'])
+        if 'content' in final_response and 'tool_calls' in final_response:
+            print(f"Content: {final_response['content']}")
+            print(f"Tool Calls: {final_response['tool_calls']}")
+        elif 'content' in final_response:
+            print(final_response['content'])
+        else:
+            print(final_response['tool_calls'])
 
-    final_response = final_response.get('content', '')
+    if 'tool_calls' in final_response:
+        final_response_tool_calls = final_response['tool_calls']
+    else:
+        final_response_tool_calls = None
+
+    if 'content' in final_response:
+        final_response_content = final_response['content']
+    else:
+        final_response_content = None
 
     # Log conversation history if logging is enabled
     if log_conversation:
@@ -576,7 +644,10 @@ def complete_reasoning_task(
             'max_tokens': max_tokens,
             'api_url': api_url,
             'conversation_history': conversation_history,
-            'final_response': final_response
+            'final_response': final_response_content,
+            'final_response_tool_calls': final_response_tool_calls,
+            'thinking_tools': thinking_tools,
+            'output_tools': output_tools
         }
 
         # Write to file
@@ -589,4 +660,4 @@ def complete_reasoning_task(
             if verbose:
                 print(f"\n{Fore.RED}Failed to log conversation history: {Style.RESET_ALL}{str(e)}")
 
-    return final_response, conversation_history, tools
+    return {'content': final_response_content, 'tool_calls': final_response_tool_calls}, conversation_history, thinking_tools, output_tools

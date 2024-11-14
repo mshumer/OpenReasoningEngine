@@ -24,6 +24,13 @@ def reason():
         "wolfram_app_id": "key",      # optional
         "max_reasoning_steps": 10,    # optional
         "image": "image-url or base64" # optional
+        "output_tools": [
+            {
+                "type": "tool-type",
+                "name": "tool-name",
+                "description": "tool-description"
+            }
+        ] # optional
     }
     """
     try:
@@ -49,9 +56,10 @@ def reason():
         wolfram_app_id = data.get('wolfram_app_id')
         max_reasoning_steps = data.get('max_reasoning_steps')
         image = data.get('image')
-        
+        output_tools = data.get('output_tools')
+
         # Run reasoning
-        response, history, tools = complete_reasoning_task(
+        response, history, thinking_tools, output_tools = complete_reasoning_task(
             task=task,
             api_key=api_key,
             model=model,
@@ -63,13 +71,15 @@ def reason():
             chain_store_api_key=chain_store_api_key,
             wolfram_app_id=wolfram_app_id,
             max_reasoning_steps=max_reasoning_steps,
-            image=image
+            image=image,
+            output_tools=output_tools
         )
                 
         return jsonify({
             'response': response,
             'conversation_history': history,
-            'tools': tools
+            'thinking_tools': thinking_tools,
+            'output_tools': output_tools
         })
         
     except Exception as e:
@@ -143,7 +153,8 @@ def run_ensemble():
         top_p = data.get('top_p', 1.0)
         max_tokens = data.get('max_tokens', 500)
         image = data.get('image', None)
-        
+        output_tools = data.get('output_tools')
+
         # Run ensemble
         result = ensemble(
             task=task,
@@ -159,7 +170,8 @@ def run_ensemble():
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
-            image=image
+            image=image,
+            output_tools=output_tools
         )
         
         if return_reasoning:
@@ -170,9 +182,11 @@ def run_ensemble():
                     {
                         'model': config['model'],
                         'response': response,
-                        'reasoning_chain': history
+                        'reasoning_chain': history,
+                        'thinking_tools': thinking_tools,
+                        'output_tools': output_tools
                     }
-                    for config, response, history, _ in agent_results
+                    for config, response, history, thinking_tools, output_tools in agent_results
                 ]
             })
         
