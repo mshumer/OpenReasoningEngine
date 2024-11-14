@@ -56,6 +56,7 @@ def send_message_to_api(
             },
             timeout=60
         )
+        print(f"Response: {response.json()}")
 
         if verbose:
             print(f"{Fore.YELLOW}Response status: {response.status_code}{Style.RESET_ALL}")
@@ -85,6 +86,7 @@ def thinking_loop(
     wolfram_app_id: Optional[str] = None,
     max_reasoning_steps: Optional[int] = None,
     sandbox: Optional[Sandbox] = None,
+    image: Optional[str] = None
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -158,6 +160,23 @@ def thinking_loop(
 
     # Start with example messages and system message in the history
     full_conversation_history = example_messages + [system_message]
+
+    if image:
+        full_conversation_history.append({
+            'role': 'user',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': f"Here is the image the user provided:"
+                },
+                {
+                    'type': 'image_url',
+                    'image_url': {
+                        'url': image
+                    }
+                }
+            ]
+        })
 
     while continue_loop:
         # Check if we've exceeded max steps
@@ -371,7 +390,8 @@ def complete_reasoning_task(
     log_conversation: bool = False,
     chain_store_api_key: Optional[str] = None,
     wolfram_app_id: Optional[str] = None,
-    max_reasoning_steps: Optional[int] = None
+    max_reasoning_steps: Optional[int] = None,
+    image: Optional[str] = None
 ) -> Tuple[str, List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
@@ -488,6 +508,7 @@ def complete_reasoning_task(
         wolfram_app_id=wolfram_app_id,
         max_reasoning_steps=max_reasoning_steps,
         sandbox=sandbox,
+        image=image
     )
 
     # Only request final response if we didn't hit max steps

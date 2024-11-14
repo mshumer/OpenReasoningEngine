@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from engine import complete_reasoning_task
 from mixture import ensemble
 import traceback
+import base64
+import requests
 
 app = Flask(__name__)
 
@@ -47,6 +49,7 @@ def reason():
         chain_store_api_key = data.get('chain_store_api_key')
         wolfram_app_id = data.get('wolfram_app_id')
         max_reasoning_steps = data.get('max_reasoning_steps')
+        image = data.get('image')
         
         # Run reasoning
         response, history, tools = complete_reasoning_task(
@@ -60,7 +63,8 @@ def reason():
             verbose=verbose,
             chain_store_api_key=chain_store_api_key,
             wolfram_app_id=wolfram_app_id,
-            max_reasoning_steps=max_reasoning_steps
+            max_reasoning_steps=max_reasoning_steps,
+            image=image
         )
         
         return jsonify({
@@ -139,6 +143,7 @@ def run_ensemble():
         temperature = data.get('temperature', 0.7)
         top_p = data.get('top_p', 1.0)
         max_tokens = data.get('max_tokens', 500)
+        image = data.get('image', None)
         
         # Run ensemble
         result = ensemble(
@@ -154,7 +159,8 @@ def run_ensemble():
             wolfram_app_id=wolfram_app_id,
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            image=image
         )
         
         if return_reasoning:
