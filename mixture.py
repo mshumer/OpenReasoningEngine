@@ -18,7 +18,8 @@ def run_agent(
     top_p: float = 1.0,
     max_tokens: int = 500,
     image: Optional[str] = None,
-    output_tools: Optional[List[Dict]] = None
+    output_tools: Optional[List[Dict]] = None,
+    reflection_mode: bool = False
 ) -> Tuple[Dict[str, str], str, List[Dict], List[Dict]]:
     """
     Run a single agent with the given configuration.
@@ -35,6 +36,7 @@ def run_agent(
         max_tokens: Maximum number of tokens for the model if using
         image: Optional image to pass to the model if using
         output_tools: Optional list of output tools for the model if using
+        reflection_mode: Whether to enable reflection mode for this agent
     Returns:
         Tuple of (agent_config, final_response, conversation_history, thinking_tools, output_tools)
     """
@@ -46,6 +48,9 @@ def run_agent(
         if max_reasoning_steps:
             print(f"{Fore.CYAN}Max steps: {Style.RESET_ALL}{max_reasoning_steps}")
         print(f"{Fore.CYAN}Temperature: {Style.RESET_ALL}{agent_config.get('temperature', default_temperature)}")
+    
+    if verbose and reflection_mode:
+        print(f"{Fore.CYAN}Reflection mode: {Style.RESET_ALL}Enabled")
     
     response, history, thinking_tools, output_tools = complete_reasoning_task(
         task=task,
@@ -60,7 +65,8 @@ def run_agent(
         top_p=top_p,
         max_tokens=max_tokens,
         image=image,
-        output_tools=output_tools
+        output_tools=output_tools,
+        reflection_mode=reflection_mode
     )
 
     # Remove example chains from conversation history
@@ -105,7 +111,8 @@ def run_agents_parallel(
     top_p: float = 1.0,
     max_tokens: int = 500,
     image: Optional[str] = None,
-    output_tools: Optional[List[Dict]] = None
+    output_tools: Optional[List[Dict]] = None,
+    reflection_mode: bool = False
 ) -> List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]:
     """Run multiple agents in parallel."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -123,7 +130,8 @@ def run_agents_parallel(
                 top_p,
                 max_tokens,
                 image,
-                output_tools
+                output_tools,
+                reflection_mode
             ): agent for agent in agents
         }
         
@@ -155,7 +163,8 @@ def ensemble(
     top_p: float = 1.0,
     max_tokens: int = 500,
     image: Optional[str] = None,
-    output_tools: Optional[List[Dict]] = None
+    output_tools: Optional[List[Dict]] = None,
+    reflection_mode: bool = False
 ) -> Union[str, Tuple[str, List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]]]:
     """
     Run multiple agents in parallel and coordinate their responses.
@@ -176,6 +185,7 @@ def ensemble(
         max_tokens: Maximum number of tokens for the model if using
         image: Optional image to pass to the model if using
         output_tools: Optional list of output tools for the model if using
+        reflection_mode: Whether to enable reflection mode for all agents
     """
     # Reinitialize colorama for the main process
     init(autoreset=True)
@@ -188,6 +198,9 @@ def ensemble(
         for agent in agents:
             if 'temperature' in agent:
                 print(f"{Fore.MAGENTA}Temperature for {agent['model']}: {agent['temperature']}{Style.RESET_ALL}")
+    
+    if verbose and reflection_mode:
+        print(f"{Fore.MAGENTA}Reflection mode: {Style.RESET_ALL}Enabled for all agents")
     
     # Run all agents in parallel with max steps
     agent_results = run_agents_parallel(
@@ -202,7 +215,8 @@ def ensemble(
         top_p,
         max_tokens,
         image,
-        output_tools
+        output_tools,
+        reflection_mode
     )
     
     # Format results for coordinator
@@ -242,7 +256,8 @@ Based on your analysis, synthesize these responses into a single, high-quality r
         top_p=top_p,
         max_tokens=max_tokens,
         image=image,
-        output_tools=output_tools
+        output_tools=output_tools,
+        reflection_mode=reflection_mode
     )
     
     if return_reasoning:
