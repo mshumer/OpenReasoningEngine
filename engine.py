@@ -391,10 +391,10 @@ def complete_reasoning_task(
 
     # Initialize E2B sandbox for Python code execution
     # Timeout says how long the sandbox can stay alive
-    # You can extend the sandbox lifetime by calling sandbox.set_timeout()
-    # to reset the timout to a new value.
+    # You can extend the sandbox lifetime by calling sandbox.set_timeout
+    # to reset the timeout to a new value.
     timeout = 60 * 10 # 10 minutes
-    sandbox = Sandbox(timeout)
+    sandbox = Sandbox(timeout=timeout)
 
 
     # Define base tools that are always available
