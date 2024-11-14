@@ -31,6 +31,7 @@ def reason():
                 "description": "tool-description"
             }
         ] # optional
+        "reflection_mode": false,    # optional: enable reflection mode
     }
     """
     try:
@@ -57,6 +58,7 @@ def reason():
         max_reasoning_steps = data.get('max_reasoning_steps')
         image = data.get('image')
         output_tools = data.get('output_tools')
+        reflection_mode = data.get('reflection_mode', False)
 
         # Run reasoning
         response, history, thinking_tools, output_tools = complete_reasoning_task(
@@ -72,7 +74,8 @@ def reason():
             wolfram_app_id=wolfram_app_id,
             max_reasoning_steps=max_reasoning_steps,
             image=image,
-            output_tools=output_tools
+            output_tools=output_tools,
+            reflection_mode=reflection_mode
         )
                 
         return jsonify({
@@ -126,6 +129,7 @@ def run_ensemble():
         "temperature": 0.7,           # optional
         "top_p": 1.0,                # optional
         "max_tokens": 500            # optional
+        "reflection_mode": false,    # optional: enable reflection mode for all agents
     }
     """
     try:
@@ -154,6 +158,7 @@ def run_ensemble():
         max_tokens = data.get('max_tokens', 500)
         image = data.get('image', None)
         output_tools = data.get('output_tools')
+        reflection_mode = data.get('reflection_mode', False)
 
         # Run ensemble
         result = ensemble(
@@ -171,7 +176,8 @@ def run_ensemble():
             top_p=top_p,
             max_tokens=max_tokens,
             image=image,
-            output_tools=output_tools
+            output_tools=output_tools,
+            reflection_mode=reflection_mode
         )
         
         if return_reasoning:

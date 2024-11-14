@@ -86,7 +86,8 @@ def thinking_loop(
     wolfram_app_id: Optional[str] = None,
     max_reasoning_steps: Optional[int] = None,
     sandbox: Optional[Sandbox] = None,
-    image: Optional[str] = None
+    image: Optional[str] = None,
+    reflection_mode: bool = False
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -154,7 +155,10 @@ def thinking_loop(
                 if wolfram_app_id else ""
             ) +
             "\nReturn <DONE> after the last step.\n"
-            "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
+            + (
+                "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
+                if example_messages else ""
+            )
         )
     }
 
@@ -242,16 +246,34 @@ def thinking_loop(
             print(f"\n{Fore.BLUE}Step {step_count}{Style.RESET_ALL}")
             print(f"{Fore.BLUE}{'─' * 40}{Style.RESET_ALL}")
 
-        # Add user message
-        user_message = {
-            'role': 'user',
-            'content': (
-                'Think about your next reasoning step to perform the CURRENT_TASK. '
-                'Return just the next step. '
-                'Remember, steps should be very brief. '
-                'If this is the final step, return <DONE>.'
-            )
-        }
+        # Determine which message to send based on reflection mode and step count
+        if reflection_mode and step_count % 2 == 0:
+            # Even steps in reflection mode are for reflection
+            user_message = {
+                'role': 'user',
+                'content': (
+                    'Reflect on your last step — check for mistakes. '
+                    'Consider:\n'
+                    '1. Are your assumptions valid and well-justified?\n'
+                    '2. Did you make any logical errors or jumps in reasoning?\n'
+                    '3. Is there a more effective or efficient approach?\n'
+                    'Explain your analysis, whether you find issues or confirm the step was sound.\n'
+                    'Do not make a snap decision. Think carefully before deciding if the step is free of mistakes.\n'
+                    'Be brief and to the point.\n'
+                    'If this is the final step, return <DONE>.'
+                )
+            } # Note — these reflection steps are often a bit long, which may lead to the non-reflection steps doing more work per step than they should. Figure this out later.
+        else:
+            # Odd steps or non-reflection mode use the original message
+            user_message = {
+                'role': 'user',
+                'content': (
+                    'Think about your next reasoning step to perform the CURRENT_TASK. '
+                    'Return just the next step. '
+                    'Remember, steps should be very brief. '
+                    'If this is the final step, return <DONE>.'
+                )
+            }
 
         # Add to both conversation histories
         conversation_history.append(user_message)
@@ -368,7 +390,7 @@ def thinking_loop(
 
             if any(term in response['content'].lower() for term in termination_phrases):
                 if verbose:
-                    print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
+                    print(f"\n{Fore.MAGENTA}╭─────────────────────────────��────────────{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}│ Thinking Loop Complete{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}│ Total Steps: {step_count}{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
@@ -392,11 +414,12 @@ def complete_reasoning_task(
     wolfram_app_id: Optional[str] = None,
     max_reasoning_steps: Optional[int] = None,
     image: Optional[str] = None,
-    output_tools: Optional[List[Dict]] = None
+    output_tools: Optional[List[Dict]] = None,
+    reflection_mode: bool = False
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
-    Now supports optional structured output via output_tools.
+    Now supports optional structured output via output_tools and reflection mode.
     """
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
@@ -547,7 +570,7 @@ def complete_reasoning_task(
     conversation_history = thinking_loop(
         task,
         api_key,
-        thinking_tools,  # Pass only thinking tools here
+        thinking_tools,
         model,
         temperature,
         top_p,
@@ -558,7 +581,8 @@ def complete_reasoning_task(
         wolfram_app_id=wolfram_app_id,
         max_reasoning_steps=max_reasoning_steps,
         sandbox=sandbox,
-        image=image
+        image=image,
+        reflection_mode=reflection_mode
     )
 
     # Only request final response if we didn't hit max steps
