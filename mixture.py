@@ -16,7 +16,8 @@ def run_agent(
     wolfram_app_id: Optional[str] = None,
     default_temperature: float = 0.7,
     top_p: float = 1.0,
-    max_tokens: int = 500
+    max_tokens: int = 500,
+    image: Optional[str] = None
 ) -> Tuple[Dict[str, str], str, List[Dict], List[Dict]]:
     """
     Run a single agent with the given configuration.
@@ -31,7 +32,7 @@ def run_agent(
         default_temperature: Default temperature for the model if using
         top_p: Top p for the model if using
         max_tokens: Maximum number of tokens for the model if using
-    
+        image: Optional image to pass to the model if using
     Returns:
         Tuple of (agent_config, final_response, conversation_history, tools)
     """
@@ -55,7 +56,8 @@ def run_agent(
         wolfram_app_id=wolfram_app_id,
         temperature=agent_config.get('temperature', default_temperature),
         top_p=top_p,
-        max_tokens=max_tokens
+        max_tokens=max_tokens,
+        image=image
     )
 
     # Remove example chains from conversation history
@@ -98,7 +100,8 @@ def run_agents_parallel(
     wolfram_app_id: Optional[str] = None,
     temperature: float = 0.7,
     top_p: float = 1.0,
-    max_tokens: int = 500
+    max_tokens: int = 500,
+    image: Optional[str] = None
 ) -> List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]:
     """Run multiple agents in parallel."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -114,7 +117,8 @@ def run_agents_parallel(
                 wolfram_app_id,
                 temperature,
                 top_p,
-                max_tokens
+                max_tokens,
+                image
             ): agent for agent in agents
         }
         
@@ -144,7 +148,8 @@ def ensemble(
     wolfram_app_id: Optional[str] = None,
     temperature: float = 0.7,
     top_p: float = 1.0,
-    max_tokens: int = 500
+    max_tokens: int = 500,
+    image: Optional[str] = None
 ) -> Union[str, Tuple[str, List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]]]:
     """
     Run multiple agents in parallel and coordinate their responses.
@@ -163,6 +168,7 @@ def ensemble(
         temperature: Default temperature for the model if using
         top_p: Top p for the model if using
         max_tokens: Maximum number of tokens for the model if using
+        image: Optional image to pass to the model if using
     """
     # Reinitialize colorama for the main process
     init(autoreset=True)
@@ -187,7 +193,8 @@ def ensemble(
         wolfram_app_id,
         temperature,
         top_p,
-        max_tokens
+        max_tokens,
+        image
     )
     
     # Format results for coordinator
@@ -225,7 +232,8 @@ Based on your analysis, synthesize these responses into a single, high-quality r
         wolfram_app_id=wolfram_app_id,
         temperature=temperature,
         top_p=top_p,
-        max_tokens=max_tokens
+        max_tokens=max_tokens,
+        image=image
     )
     
     if return_reasoning:

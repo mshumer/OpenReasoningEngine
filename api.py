@@ -22,7 +22,8 @@ def reason():
         "verbose": false,             # optional
         "chain_store_api_key": "key", # optional
         "wolfram_app_id": "key",      # optional
-        "max_reasoning_steps": 10      # optional
+        "max_reasoning_steps": 10,    # optional
+        "image": "image-url or base64" # optional
     }
     """
     try:
@@ -33,12 +34,12 @@ def reason():
         api_key = data.get('api_key')
         model = data.get('model')
         api_url = data.get('api_url')
-        
+    
         if not all([task, api_key, model, api_url]):
             return jsonify({
                 'error': 'Missing required parameters. Need: task, api_key, model, api_url'
             }), 400
-        
+                
         # Optional parameters
         temperature = data.get('temperature', 0.7)
         top_p = data.get('top_p', 1.0)
@@ -47,6 +48,7 @@ def reason():
         chain_store_api_key = data.get('chain_store_api_key')
         wolfram_app_id = data.get('wolfram_app_id')
         max_reasoning_steps = data.get('max_reasoning_steps')
+        image = data.get('image')
         
         # Run reasoning
         response, history, tools = complete_reasoning_task(
@@ -60,9 +62,10 @@ def reason():
             verbose=verbose,
             chain_store_api_key=chain_store_api_key,
             wolfram_app_id=wolfram_app_id,
-            max_reasoning_steps=max_reasoning_steps
+            max_reasoning_steps=max_reasoning_steps,
+            image=image
         )
-        
+                
         return jsonify({
             'response': response,
             'conversation_history': history,
@@ -139,6 +142,7 @@ def run_ensemble():
         temperature = data.get('temperature', 0.7)
         top_p = data.get('top_p', 1.0)
         max_tokens = data.get('max_tokens', 500)
+        image = data.get('image', None)
         
         # Run ensemble
         result = ensemble(
@@ -154,7 +158,8 @@ def run_ensemble():
             wolfram_app_id=wolfram_app_id,
             temperature=temperature,
             top_p=top_p,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            image=image
         )
         
         if return_reasoning:
