@@ -2,8 +2,6 @@ from flask import Flask, request, jsonify
 from engine import complete_reasoning_task
 from mixture import ensemble
 import traceback
-import base64
-import requests
 
 app = Flask(__name__)
 
@@ -24,7 +22,8 @@ def reason():
         "verbose": false,             # optional
         "chain_store_api_key": "key", # optional
         "wolfram_app_id": "key",      # optional
-        "max_reasoning_steps": 10      # optional
+        "max_reasoning_steps": 10,    # optional
+        "image": "image-url or base64" # optional
     }
     """
     try:
@@ -35,12 +34,12 @@ def reason():
         api_key = data.get('api_key')
         model = data.get('model')
         api_url = data.get('api_url')
-        
+    
         if not all([task, api_key, model, api_url]):
             return jsonify({
                 'error': 'Missing required parameters. Need: task, api_key, model, api_url'
             }), 400
-        
+                
         # Optional parameters
         temperature = data.get('temperature', 0.7)
         top_p = data.get('top_p', 1.0)
@@ -66,7 +65,7 @@ def reason():
             max_reasoning_steps=max_reasoning_steps,
             image=image
         )
-        
+                
         return jsonify({
             'response': response,
             'conversation_history': history,
