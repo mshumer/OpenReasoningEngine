@@ -154,7 +154,10 @@ def thinking_loop(
                 if wolfram_app_id else ""
             ) +
             "\nReturn <DONE> after the last step.\n"
-            "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
+            + (
+                "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
+                if example_messages else ""
+            )
         )
     }
 
