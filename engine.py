@@ -1,12 +1,13 @@
 import os
 import requests
+from e2b_code_interpreter import Sandbox
 from typing import List, Dict, Optional, Tuple
 from colorama import init, Fore, Style
 from tools import execute_tool, clear_interpreter_state
 import json
 from datetime import datetime
 from chain_store import (
-    get_similar_chains, 
+    get_similar_chains,
     prepare_examples_messages
 )
 
@@ -82,7 +83,8 @@ def thinking_loop(
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
     wolfram_app_id: Optional[str] = None,
-    max_reasoning_steps: Optional[int] = None
+    max_reasoning_steps: Optional[int] = None,
+    sandbox: Optional[Sandbox] = None,
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -110,10 +112,10 @@ def thinking_loop(
         "1. find_datapoint_on_web: Search the web for information using Perplexity\n"
         "2. python: For executing Python code"
     )
-    
+
     if wolfram_app_id:
         tools_description += "\n3. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
-    
+
     system_message = {
         'role': 'system',
         'content': (
@@ -130,7 +132,7 @@ def thinking_loop(
             ) +
             "\nWhen searching the web:\n"
             "- The find_datapoint_on_web tool uses human MTurk workers who do quick research and return what they find\n"
-            "- Only ask simple, factual questions that can be directly looked up\n" 
+            "- Only ask simple, factual questions that can be directly looked up\n"
             "- Queries must be single, straightforward questions - no compound questions\n"
             "- Do not ask workers to make logical inferences or analyze information\n"
             "- If a query is rejected, simplify it to ask for just one basic fact\n"
@@ -162,7 +164,7 @@ def thinking_loop(
         if max_reasoning_steps and step_count > max_reasoning_steps:
             if verbose:
                 print(f"\n{Fore.YELLOW}Maximum reasoning steps ({max_reasoning_steps}) reached. Forcing completion.{Style.RESET_ALL}")
-            
+
             # Add a system message explaining the forced stop
             force_stop_message = {
                 'role': 'system',
@@ -172,7 +174,7 @@ def thinking_loop(
             }
             conversation_history.append(force_stop_message)
             full_conversation_history.append(force_stop_message)
-            
+
             # Add a user message requesting the final answer
             final_user_message = {
                 'role': 'user',
@@ -185,7 +187,7 @@ def thinking_loop(
             }
             conversation_history.append(final_user_message)
             full_conversation_history.append(final_user_message)
-            
+
             # Get final response when hitting max steps
             response = send_message_to_api(
                 task,
@@ -200,7 +202,7 @@ def thinking_loop(
                 verbose
             )
             print('Final response:', response)
-            
+
             # Add the final response to histories
             assistant_message = {
                 'role': 'assistant',
@@ -209,11 +211,11 @@ def thinking_loop(
             }
             conversation_history.append(assistant_message)
             full_conversation_history.append(assistant_message)
-            
+
             if verbose and response.get('content'):
                 print(f"\n{Fore.GREEN}Final Response after max steps:{Style.RESET_ALL}")
                 print(response.get('content'))
-            
+
             # Return here to skip the additional final response request
             return full_conversation_history
 
@@ -231,7 +233,7 @@ def thinking_loop(
                 'If this is the final step, return <DONE>.'
             )
         }
-        
+
         # Add to both conversation histories
         conversation_history.append(user_message)
         full_conversation_history.append(user_message)
@@ -270,11 +272,11 @@ def thinking_loop(
                     print(f"\n{Fore.YELLOW}╭──────────────────────────────────────────{Style.RESET_ALL}")
                     print(f"{Fore.YELLOW}│ Tool Call Detected{Style.RESET_ALL}")
                     print(f"{Fore.YELLOW}├──────────────────────────────────────────{Style.RESET_ALL}")
-                
+
                 try:
                     # Execute tool and get result
                     tool_name = tool_call['function']['name']
-                    
+
                     # Add error handling for argument parsing
                     try:
                         if 'arguments' not in tool_call['function'] or not tool_call['function']['arguments']:
@@ -282,30 +284,31 @@ def thinking_loop(
                             if verbose:
                                 print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
                             raise ValueError(error_msg)
-                            
+
                         arguments = json.loads(tool_call['function']['arguments'])
-                        
+
                     except json.JSONDecodeError as e:
                         error_msg = f"Invalid JSON in tool arguments: {tool_call['function'].get('arguments', 'NO_ARGS')}"
                         if verbose:
                             print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
                             print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
                         raise ValueError(error_msg)
-                    
+
                     if verbose:
                         print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
                         print(f"{Fore.YELLOW}│ Arguments: {Style.RESET_ALL}{json.dumps(arguments, indent=2)}")
-                    
+
                     result = execute_tool(
-                        tool_name, 
+                        tool_name,
                         arguments,
                         task=task,
                         api_key=api_key,
                         model=model,
                         api_url=api_url,
-                        wolfram_app_id=wolfram_app_id
+                        wolfram_app_id=wolfram_app_id,
+                        sandbox=sandbox,
                     )
-                    
+
                     # Add tool result to both histories
                     tool_message = {
                         'role': 'tool',
@@ -314,16 +317,16 @@ def thinking_loop(
                     }
                     conversation_history.append(tool_message)
                     full_conversation_history.append(tool_message)
-                    
+
                     if verbose:
                         print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
                         print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
-                
+
                 except Exception as e:
                     error_msg = str(e)
                     if verbose:
                         print(f"{Fore.RED}Error executing tool: {error_msg}{Style.RESET_ALL}")
-                    
+
                     # Add error message to conversation history so model can correct its approach
                     error_message = {
                         'role': 'system',
@@ -375,7 +378,7 @@ def complete_reasoning_task(
     """
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
-    
+
     if api_key is None:
         raise ValueError('API key not provided.')
 
@@ -385,6 +388,14 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}├──────────────────────────────────────────{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}│ {task}{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
+
+    # Initialize E2B sandbox for Python code execution
+    # Timeout says how long the sandbox can stay alive
+    # You can extend the sandbox lifetime by calling sandbox.set_timeout()
+    # to reset the timout to a new value.
+    timeout = 60 * 10 # 10 minutes
+    sandbox = Sandbox(timeout)
+
 
     # Define base tools that are always available
     tools = [
@@ -475,7 +486,8 @@ def complete_reasoning_task(
         verbose,
         chain_store_api_key=chain_store_api_key,
         wolfram_app_id=wolfram_app_id,
-        max_reasoning_steps=max_reasoning_steps
+        max_reasoning_steps=max_reasoning_steps,
+        sandbox=sandbox,
     )
 
     # Only request final response if we didn't hit max steps
@@ -508,7 +520,7 @@ def complete_reasoning_task(
     else:
         # Use the last assistant message as the final response
         final_response = next(
-            (msg for msg in reversed(conversation_history) 
+            (msg for msg in reversed(conversation_history)
              if msg['role'] == 'assistant' and msg.get('content')),
             {'content': None}
         )
@@ -526,14 +538,14 @@ def complete_reasoning_task(
         bottom_system_message_index = next((i for i, msg in enumerate(reversed(conversation_history)) if msg.get('role') == 'system'), None)
         if bottom_system_message_index is not None:
             conversation_history = conversation_history[-bottom_system_message_index:]
-        
+
         # Create logs directory if it doesn't exist
         os.makedirs('logs', exist_ok=True)
-        
+
         # Create filename with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'logs/conversation_{timestamp}.json'
-        
+
         # Prepare log data
         log_data = {
             'task': task,
@@ -545,7 +557,7 @@ def complete_reasoning_task(
             'conversation_history': conversation_history,
             'final_response': final_response
         }
-        
+
         # Write to file
         try:
             with open(filename, 'w', encoding='utf-8') as f:
