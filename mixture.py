@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, Tuple, Any, Union
+from classes import ModelConfig
 from engine import complete_reasoning_task
 import json
 from colorama import init, Fore, Style
@@ -9,7 +10,7 @@ init()
 
 def run_agent(
     task: str,
-    agent_config: Dict[str, str],
+    agent_config: ModelConfig,
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
     max_reasoning_steps: Optional[int] = None,
@@ -26,7 +27,7 @@ def run_agent(
     
     Args:
         task: The task to complete
-        agent_config: Dictionary containing 'model', 'api_key', and 'api_url'
+        agent_config: ModelConfig object
         verbose: Whether to show detailed output
         chain_store_api_key: API key for chain store if using
         max_reasoning_steps: Maximum number of reasoning steps for this agent
@@ -101,7 +102,7 @@ def format_agent_results(
 
 def run_agents_parallel(
     task: str,
-    agents: List[Dict[str, str]],
+    agents: List[ModelConfig],
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
     max_workers: Optional[int] = None,
@@ -150,8 +151,8 @@ def run_agents_parallel(
 
 def ensemble(
     task: str,
-    agents: List[Dict[str, str]],
-    coordinator: Dict[str, str],
+    agents: List[ModelConfig],
+    coordinator: ModelConfig,
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
     max_workers: Optional[int] = None,

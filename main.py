@@ -41,9 +41,11 @@ def main():
     # Simple mode: just run one model
     response, history, tools = complete_reasoning_task(
         task=task,
-        api_key="[REDACTED]",
-        model="openai/gpt-4o-mini",
-        api_url="https://openrouter.ai/api/v1/chat/completions",
+        model_config={
+            "model": "openai/gpt-4o-mini",
+            "api_url": "https://openrouter.ai/api/v1/chat/completions",
+            "api_key": "[REDACTED]"
+        },
         verbose=True
     )
 

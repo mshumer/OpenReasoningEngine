@@ -1,5 +1,6 @@
 import os
 import requests
+from classes import ModelConfig
 from e2b_code_interpreter import Sandbox
 from typing import List, Dict, Optional, Tuple, Union
 from colorama import init, Fore, Style
@@ -17,13 +18,8 @@ init()
 def send_message_to_api(
     task: str,
     messages: List[Dict],
-    api_key: str,
     tools: List[Dict],
-    model: str = 'gpt-4o-mini',
-    temperature: float = 0.7,
-    top_p: float = 1.0,
-    max_tokens: int = 500,
-    api_url: str = 'https://api.openai.com/v1/chat/completions',
+    model_config: ModelConfig,
     verbose: bool = False,
     is_first_step: bool = False
 ) -> Dict:
@@ -34,25 +30,25 @@ def send_message_to_api(
         print(f"\n{Fore.CYAN}╭──────────────────────────────────────────{Style.RESET_ALL}")
         print(f"{Fore.CYAN}│ Sending Request to API{Style.RESET_ALL}")
         print(f"{Fore.CYAN}├──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│ Model: {Style.RESET_ALL}{model}")
-        print(f"{Fore.CYAN}│ URL: {Style.RESET_ALL}{api_url}")
-        print(f"{Fore.CYAN}│ Temperature: {Style.RESET_ALL}{temperature}")
+        print(f"{Fore.CYAN}│ Model: {Style.RESET_ALL}{model_config['model']}")
+        print(f"{Fore.CYAN}│ URL: {Style.RESET_ALL}{model_config['api_url']}")
+        print(f"{Fore.CYAN}│ Temperature: {Style.RESET_ALL}{model_config['temperature']}")
         print(f"{Fore.CYAN}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     try:
         response = requests.post(
-            api_url,
+            model_config['api_url'],
             headers={
-                'Authorization': f'Bearer {api_key}',
+                'Authorization': f'Bearer {model_config['api_key']}',
                 'Content-Type': 'application/json'
             },
             json={
-                'model': model,
+                'model': model_config['model'],
                 'messages': messages,
                 'tools': tools,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'top_p': top_p,
+                'max_tokens': model_config['max_tokens'],
+                'temperature': model_config['temperature'],
+                'top_p': model_config['top_p'],
             },
             timeout=60
         )
@@ -74,13 +70,8 @@ def send_message_to_api(
 
 def thinking_loop(
     task: str,
-    api_key: str,
+    model_config: ModelConfig,
     tools: List[Dict],
-    model: str = 'gpt-4o-mini',
-    temperature: float = 0.7,
-    top_p: float = 1.0,
-    max_tokens: int = 500,
-    api_url: str = 'https://api.openai.com/v1/chat/completions',
     verbose: bool = False,
     chain_store_api_key: Optional[str] = None,
     wolfram_app_id: Optional[str] = None,
@@ -215,13 +206,8 @@ def thinking_loop(
             response = send_message_to_api(
                 task,
                 full_conversation_history,
-                api_key,
                 tools,
-                model,
-                temperature,
-                top_p,
-                max_tokens,
-                api_url,
+                model_config,
                 verbose
             )
             print('Final response:', response)
@@ -283,13 +269,8 @@ def thinking_loop(
         response = send_message_to_api(
             task,
             full_conversation_history,
-            api_key,
             tools,
-            model,
-            temperature,
-            top_p,
-            max_tokens,
-            api_url,
+            model_config,
             verbose,
             is_first_step=(step_count == 1)
         )
@@ -343,9 +324,7 @@ def thinking_loop(
                         tool_name,
                         arguments,
                         task=task,
-                        api_key=api_key,
-                        model=model,
-                        api_url=api_url,
+                        model_config=model_config,
                         wolfram_app_id=wolfram_app_id,
                         sandbox=sandbox,
                     )
@@ -402,12 +381,7 @@ def thinking_loop(
 
 def complete_reasoning_task(
     task: str,
-    api_key: Optional[str] = None,
-    model: str = 'gpt-4o-mini',
-    temperature: float = 0.7,
-    top_p: float = 1.0,
-    max_tokens: int = 3000,
-    api_url: str = 'https://api.openai.com/v1/chat/completions',
+    model_config: ModelConfig,
     verbose: bool = False,
     log_conversation: bool = False,
     chain_store_api_key: Optional[str] = None,
@@ -424,8 +398,19 @@ def complete_reasoning_task(
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
 
-    if api_key is None:
+    if model_config['api_key'] is None:
         raise ValueError('API key not provided.')
+    
+    if model_config['api_url'] is None:
+        model_config['api_url'] = 'https://api.openai.com/v1/chat/completions'
+    if model_config['model'] is None:
+        model_config['model'] = 'gpt-4o-mini'
+    if model_config['temperature'] is None:
+        model_config['temperature'] = 0.7
+    if model_config['top_p'] is None:
+        model_config['top_p'] = 1.0
+    if model_config['max_tokens'] is None:
+        model_config['max_tokens'] = 500
 
     if verbose:
         print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
@@ -569,13 +554,8 @@ def complete_reasoning_task(
     # Run thinking loop with only thinking tools
     conversation_history = thinking_loop(
         task,
-        api_key,
+        model_config,
         thinking_tools,
-        model,
-        temperature,
-        top_p,
-        max_tokens,
-        api_url,
         verbose,
         chain_store_api_key=chain_store_api_key,
         wolfram_app_id=wolfram_app_id,
@@ -607,13 +587,8 @@ def complete_reasoning_task(
         final_response = send_message_to_api(
             task,
             conversation_history,
-            api_key,
+            model_config,
             output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
-            model,
-            temperature,
-            top_p,
-            max_tokens,
-            api_url,
             verbose
         )
     else:
@@ -662,11 +637,11 @@ def complete_reasoning_task(
         # Prepare log data
         log_data = {
             'task': task,
-            'model': model,
-            'temperature': temperature,
-            'top_p': top_p,
-            'max_tokens': max_tokens,
-            'api_url': api_url,
+            'model': model_config['model'],
+            'temperature': model_config['temperature'],
+            'top_p': model_config['top_p'],
+            'max_tokens': model_config['max_tokens'],
+            'api_url': model_config['api_url'],
             'conversation_history': conversation_history,
             'final_response': final_response_content,
             'final_response_tool_calls': final_response_tool_calls,

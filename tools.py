@@ -6,6 +6,7 @@ from io import StringIO
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
 import json
+from classes import ModelConfig
 import wolframalpha
 import numpy as np
 import pandas as pd
@@ -211,9 +212,7 @@ def execute_tool(
     tool_name: str,
     parameters: Dict[str, Any],
     task: str = None,
-    api_key: str = None,
-    model: str = None,
-    api_url: str = None,
+    model_config: ModelConfig = None,
     wolfram_app_id: str = None,
     sandbox: Optional[Sandbox] = None
 ) -> Any:
@@ -239,7 +238,7 @@ def execute_tool(
     if tool_name == "python":
         parameters = {**parameters, "task": task, "sandbox": sandbox}
     elif tool_name == "find_datapoint_on_web":
-        parameters = {**parameters, "api_key": api_key, "api_url": api_url}
+        parameters = {**parameters, "api_key": model_config['api_key'], "api_url": model_config['api_url']}
     elif tool_name == "wolfram":
         parameters = {**parameters, "wolfram_app_id": wolfram_app_id}
 

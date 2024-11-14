@@ -13,12 +13,14 @@ def reason():
     Expected JSON payload:
     {
         "task": "The task description",
-        "api_key": "your-api-key",
-        "model": "model-name",
-        "api_url": "api-endpoint",
-        "temperature": 0.7,            # optional
-        "top_p": 1.0,                 # optional
-        "max_tokens": 500,            # optional
+        "model_config": {
+            "api_key": "your-api-key",
+            "model": "model-name",
+            "api_url": "api-endpoint",
+            "temperature": 0.7,            # optional
+            "top_p": 1.0,                 # optional
+            "max_tokens": 500             # optional
+        },
         "verbose": false,             # optional
         "chain_store_api_key": "key", # optional
         "wolfram_app_id": "key",      # optional
@@ -39,13 +41,11 @@ def reason():
         
         # Required parameters
         task = data.get('task')
-        api_key = data.get('api_key')
-        model = data.get('model')
-        api_url = data.get('api_url')
+        model_config = data.get('model_config')
     
-        if not all([task, api_key, model, api_url]):
+        if not all([task, model_config, model_config['api_key'], model_config['model'], model_config['api_url']]):
             return jsonify({
-                'error': 'Missing required parameters. Need: task, api_key, model, api_url'
+                'error': 'Missing required parameters. Need: task, model_config, model_config["api_key"], model_config["model"], model_config["api_url"]'
             }), 400
                 
         # Optional parameters
@@ -63,11 +63,7 @@ def reason():
         # Run reasoning
         response, history, thinking_tools, output_tools = complete_reasoning_task(
             task=task,
-            api_key=api_key,
-            model=model,
-            api_url=api_url,
-            temperature=temperature,
-            top_p=top_p,
+            model_config=model_config,
             max_tokens=max_tokens,
             verbose=verbose,
             chain_store_api_key=chain_store_api_key,
