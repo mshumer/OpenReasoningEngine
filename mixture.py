@@ -17,7 +17,8 @@ def run_agent(
     default_temperature: float = 0.7,
     top_p: float = 1.0,
     max_tokens: int = 500,
-    image: Optional[str] = None
+    image: Optional[str] = None,
+    output_tools: Optional[List[Dict]] = None
 ) -> Tuple[Dict[str, str], str, List[Dict], List[Dict]]:
     """
     Run a single agent with the given configuration.
@@ -33,8 +34,9 @@ def run_agent(
         top_p: Top p for the model if using
         max_tokens: Maximum number of tokens for the model if using
         image: Optional image to pass to the model if using
+        output_tools: Optional list of output tools for the model if using
     Returns:
-        Tuple of (agent_config, final_response, conversation_history, tools)
+        Tuple of (agent_config, final_response, conversation_history, thinking_tools, output_tools)
     """
     # Reinitialize colorama for this process
     init(autoreset=True)
@@ -45,19 +47,20 @@ def run_agent(
             print(f"{Fore.CYAN}Max steps: {Style.RESET_ALL}{max_reasoning_steps}")
         print(f"{Fore.CYAN}Temperature: {Style.RESET_ALL}{agent_config.get('temperature', default_temperature)}")
     
-    response, history, tools = complete_reasoning_task(
+    response, history, thinking_tools, output_tools = complete_reasoning_task(
         task=task,
         api_key=agent_config['api_key'],
         model=agent_config['model'],
         api_url=agent_config['api_url'],
         verbose=verbose,
-        chain_store_api_key=chain_store_api_key,
+        chain_store_api_key=chain_store_api_key,    
         max_reasoning_steps=max_reasoning_steps,
         wolfram_app_id=wolfram_app_id,
         temperature=agent_config.get('temperature', default_temperature),
         top_p=top_p,
         max_tokens=max_tokens,
-        image=image
+        image=image,
+        output_tools=output_tools
     )
 
     # Remove example chains from conversation history
@@ -65,7 +68,7 @@ def run_agent(
     if bottom_system_message_index is not None:
         history = history[-bottom_system_message_index:]
     
-    return agent_config, response, history, tools
+    return agent_config, response, history, thinking_tools, output_tools
 
 def format_agent_results(
     agent_results: List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]
@@ -73,7 +76,7 @@ def format_agent_results(
     """Format the results from multiple agents into a prompt for the coordinator."""
     formatted_results = "Here are the responses from different AI models:\n\n"
     
-    for i, (agent_config, response, history, _) in enumerate(agent_results, 1):
+    for i, (agent_config, response, history, thinking_tools, output_tools) in enumerate(agent_results, 1):
         formatted_results += f"Model {i} ({agent_config['model']}):\n"
         formatted_results += "Reasoning steps:\n"
         
@@ -101,7 +104,8 @@ def run_agents_parallel(
     temperature: float = 0.7,
     top_p: float = 1.0,
     max_tokens: int = 500,
-    image: Optional[str] = None
+    image: Optional[str] = None,
+    output_tools: Optional[List[Dict]] = None
 ) -> List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]:
     """Run multiple agents in parallel."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -118,7 +122,8 @@ def run_agents_parallel(
                 temperature,
                 top_p,
                 max_tokens,
-                image
+                image,
+                output_tools
             ): agent for agent in agents
         }
         
@@ -149,7 +154,8 @@ def ensemble(
     temperature: float = 0.7,
     top_p: float = 1.0,
     max_tokens: int = 500,
-    image: Optional[str] = None
+    image: Optional[str] = None,
+    output_tools: Optional[List[Dict]] = None
 ) -> Union[str, Tuple[str, List[Tuple[Dict[str, str], str, List[Dict], List[Dict]]]]]:
     """
     Run multiple agents in parallel and coordinate their responses.
@@ -169,6 +175,7 @@ def ensemble(
         top_p: Top p for the model if using
         max_tokens: Maximum number of tokens for the model if using
         image: Optional image to pass to the model if using
+        output_tools: Optional list of output tools for the model if using
     """
     # Reinitialize colorama for the main process
     init(autoreset=True)
@@ -194,7 +201,8 @@ def ensemble(
         temperature,
         top_p,
         max_tokens,
-        image
+        image,
+        output_tools
     )
     
     # Format results for coordinator
@@ -221,7 +229,7 @@ Based on your analysis, synthesize these responses into a single, high-quality r
     if verbose:
         print(f"\n{Fore.CYAN}Running coordinator model: {Style.RESET_ALL}{coordinator['model']}")
     
-    coordinator_response, _, _ = complete_reasoning_task(
+    coordinator_response, _, _, _ = complete_reasoning_task(
         task=coordinator_task,
         api_key=coordinator['api_key'],
         model=coordinator['model'],
@@ -233,7 +241,8 @@ Based on your analysis, synthesize these responses into a single, high-quality r
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_tokens,
-        image=image
+        image=image,
+        output_tools=output_tools
     )
     
     if return_reasoning:
