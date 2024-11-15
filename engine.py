@@ -442,7 +442,8 @@ def complete_reasoning_task(
     output_tools: Optional[List[Dict]] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    tools_config: Optional[Dict] = None
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
@@ -454,7 +455,7 @@ def complete_reasoning_task(
 
     if api_key is None:
         raise ValueError('API key not provided.')
-
+    
     if verbose:
         print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}│ Starting Task{Style.RESET_ALL}")
@@ -464,13 +465,20 @@ def complete_reasoning_task(
             print(f"{Fore.MAGENTA}│ With {len(previous_chains)} previous conversation chains{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
-    # Initialize E2B sandbox for Python code execution
-    timeout = 60 * 10  # 10 minutes
-    sandbox = Sandbox(timeout=timeout)
-
-    # Define thinking tools (internal tools that can be used during reasoning)
-    thinking_tools = [
-        {
+    # Define thinking tools based on configuration
+    thinking_tools = []
+    
+    # Default tool config if none provided
+    if tools_config is None:
+        tools_config = {
+            'python': {'enabled': True},
+            'web_search': {'enabled': True},
+            'wolfram': {'enabled': False}
+        }
+    
+    # Add Python tool if enabled
+    if tools_config.get('python', {}).get('enabled', True):
+        thinking_tools.append({
             "type": "function",
             "function": {
                 "name": "python",
@@ -491,8 +499,15 @@ def complete_reasoning_task(
                     "required": ["code"]
                 }
             }
-        },
-        {
+        })
+
+        # Start up the Python sandbox (E2B)
+        timeout = 60 * 10  # 10 minutes
+        sandbox = Sandbox(timeout=timeout)
+    
+    # Add web search tool if enabled
+    if tools_config.get('web_search', {}).get('enabled', True):
+        thinking_tools.append({
             "type": "function",
             "function": {
                 "name": "find_datapoint_on_web",
@@ -508,11 +523,10 @@ def complete_reasoning_task(
                     "required": ["query"]
                 }
             }
-        }
-    ]
-
-    # Add Wolfram tool only if wolfram_app_id is provided
-    if wolfram_app_id:
+        })
+    
+    # Add Wolfram tool if enabled and app_id provided
+    if tools_config.get('wolfram', {}).get('enabled') and wolfram_app_id:
         thinking_tools.append({
             "type": "function",
             "function": {
@@ -559,15 +573,15 @@ def complete_reasoning_task(
 
     # Run thinking loop with thinking tools
     conversation_history = thinking_loop(
-        task,
-        api_key,
-        thinking_tools,
-        model,
-        temperature,
-        top_p,
-        max_tokens,
-        api_url,
-        verbose,
+        task=task,
+        api_key=api_key,
+        tools=thinking_tools,  # Pass the configured tools
+        model=model,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        api_url=api_url,
+        verbose=verbose,
         chain_store_api_key=chain_store_api_key,
         wolfram_app_id=wolfram_app_id,
         max_reasoning_steps=max_reasoning_steps,
@@ -685,5 +699,9 @@ def complete_reasoning_task(
         except Exception as e:
             if verbose:
                 print(f"\n{Fore.RED}Failed to log conversation history: {Style.RESET_ALL}{str(e)}")
+
+    # Kill the sandbox if it exists
+    if sandbox:
+        sandbox.kill()
 
     return {'content': final_response_content, 'tool_calls': final_response_tool_calls}, conversation_history, thinking_tools, output_tools

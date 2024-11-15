@@ -241,9 +241,16 @@ def chat_completions():
         
         # Extract config parameters
         reasoning_config = config.get('reasoning', {})
-        tools_config = config.get('tools', {})
+        tools_config = config.get('thinking_tools', {})
         
         print(f"Calling complete_reasoning_task with model config: {model}")  # Debug print
+        
+        # Extract tools configuration
+        tools_config = config.get('thinking_tools', {
+            'python': {'enabled': True},
+            'web_search': {'enabled': True},
+            'wolfram': {'enabled': False}
+        })
         
         # Run reasoning task
         response, history, thinking_tools, output_tools = complete_reasoning_task(
@@ -256,13 +263,14 @@ def chat_completions():
             max_tokens=max_tokens,
             verbose=config.get('verbose', False),
             chain_store_api_key=config.get('chain_store', {}).get('api_key'),
-            wolfram_app_id=tools_config.get('wolfram', {}).get('app_id'),
+            wolfram_app_id=tools_config.get('wolfram', {}).get('app_id') if tools_config.get('wolfram', {}).get('enabled') else None,
             max_reasoning_steps=reasoning_config.get('max_steps'),
             image=image_url,
             output_tools=config.get('output_tools'),
             reflection_mode=reasoning_config.get('reflection_mode', False),
             previous_chains=previous_chains,
-            use_planning=reasoning_config.get('use_planning', True)
+            use_planning=reasoning_config.get('use_planning', True),
+            tools_config=tools_config  # Pass tools config to engine
         )
         
         # Convert response to API format
