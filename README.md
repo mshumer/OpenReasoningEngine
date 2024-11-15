@@ -1,14 +1,18 @@
 # OpenReasoningEngine
 
-This repo will serve as a modular, open-source test-time compute engine — anyone in the community with a useful idea to improve model capabilities through is encouraged to add their approach to the system. As many approaches are added, this system will enable users to compose them to drastically increase capabilities.
+This repo serves as a modular, open-source test-time compute engine — anyone in the community with a useful idea to improve model capabilities is encouraged to add their approach to the system. As many approaches are added, this system will enable users to compose them to drastically increase capabilities.
+
+> **We are going to be very selective about what we add to this system. If an approach doesn't have a clear path to increasing the capabilities of the system, we will not add it.**
 
 ## Initial Features
 
-- Step-by-step reasoning with integrated tools (calculator, Python interpreter, web access, Wolfram Alpha)
-- Semantic chain search powered by Cohere embeddings so the models within the system can continually learn to better use this engine's rails
-- Parallel ensemble processing with multiple models (MoA)
-- Stateful Python interpreter sessions, enabling multiple threads at once
+- Step-by-step reasoning with integrated tools (Python interpreter, web search via Perplexity, Wolfram Alpha)
+- Planning from memory (continual learning from past experiences)
+- Parallel ensemble processing with multiple models (mixture-of-agents)
+- Reflection mode for self-checking reasoning steps
+- Planning system that learns from similar past tasks
 - Model-agnostic API supporting multiple providers (OpenAI, Anthropic, etc.)
+- Image input, function calling, multi-turn conversations
 
 ## Installation
 
@@ -38,7 +42,7 @@ response, history, tools = complete_reasoning_task(
 
 ### Ensemble Mode
 
-Leverage multiple models with a coordinator:
+Leverage multiple models with a coordinator (highly experimental (as if the rest of the system wasn't unstable enough)):
 
 ```python
 from mixture import ensemble
@@ -67,18 +71,6 @@ ensemble_response = ensemble(
 ```
 
 ## Built-in Tools
-
-### Calculator
-
-Evaluate mathematical expressions:
-
-```python
-{
-    "tool": "calculator",
-    "parameters": {
-        "operation": "2 + 2"
-    }
-}
 ```
 
 ### Python Interpreter
@@ -91,6 +83,19 @@ Execute Python code with optional state persistence:
     "parameters": {
         "code": "x = 5",
         "thread_id": "my_session"  # Optional: maintains state across calls
+    }
+}
+```
+
+### Web Search
+
+Search the web for information. Uses the Perplexity API — the AI *thinks* it's asking a MTurk worker because telling it this led to better results. I love my job.
+
+```python
+{
+    "tool": "web_search",
+    "parameters": {
+        "query": "What is the weather in Tokyo?"
     }
 }
 ```
