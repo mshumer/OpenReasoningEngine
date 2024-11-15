@@ -24,14 +24,23 @@ def reason():
         "wolfram_app_id": "key",      # optional
         "max_reasoning_steps": 10,    # optional
         "image": "image-url or base64" # optional
-        "output_tools": [
+        "output_tools": [             # optional
             {
                 "type": "tool-type",
                 "name": "tool-name",
                 "description": "tool-description"
             }
-        ] # optional
-        "reflection_mode": false,    # optional: enable reflection mode
+        ],
+        "reflection_mode": false,      # optional: enable reflection mode
+        "previous_chains": [           # optional: previous conversation chains
+            [
+                {
+                    "role": "system|user|assistant|tool",
+                    "content": "message content",
+                    "tool_calls": [] # optional
+                }
+            ]
+        ]
     }
     """
     try:
@@ -59,6 +68,7 @@ def reason():
         image = data.get('image')
         output_tools = data.get('output_tools')
         reflection_mode = data.get('reflection_mode', False)
+        previous_chains = data.get('previous_chains', [])  # New parameter
 
         # Run reasoning
         response, history, thinking_tools, output_tools = complete_reasoning_task(
@@ -75,12 +85,13 @@ def reason():
             max_reasoning_steps=max_reasoning_steps,
             image=image,
             output_tools=output_tools,
-            reflection_mode=reflection_mode
+            reflection_mode=reflection_mode,
+            previous_chains=previous_chains
         )
                 
         return jsonify({
             'response': response,
-            'conversation_history': history,
+            'reasoning_chain': history,
             'thinking_tools': thinking_tools,
             'output_tools': output_tools
         })
