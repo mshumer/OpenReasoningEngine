@@ -504,6 +504,8 @@ def complete_reasoning_task(
         # Start up the Python sandbox (E2B)
         timeout = 60 * 10  # 10 minutes
         sandbox = Sandbox(timeout=timeout)
+    else:
+        sandbox = None
     
     # Add web search tool if enabled
     if tools_config.get('web_search', {}).get('enabled', True):
@@ -573,15 +575,15 @@ def complete_reasoning_task(
 
     # Run thinking loop with thinking tools
     conversation_history = thinking_loop(
-        task=task,
-        api_key=api_key,
-        tools=thinking_tools,  # Pass the configured tools
-        model=model,
-        temperature=temperature,
-        top_p=top_p,
-        max_tokens=max_tokens,
-        api_url=api_url,
-        verbose=verbose,
+        task,
+        api_key,
+        thinking_tools,
+        model,
+        temperature,
+        top_p,
+        max_tokens,
+        api_url,
+        verbose,
         chain_store_api_key=chain_store_api_key,
         wolfram_app_id=wolfram_app_id,
         max_reasoning_steps=max_reasoning_steps,

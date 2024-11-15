@@ -241,8 +241,7 @@ def chat_completions():
         
         # Extract config parameters
         reasoning_config = config.get('reasoning', {})
-        tools_config = config.get('thinking_tools', {})
-        
+        tools_config = config.get('thinking_tools', {})        
         print(f"Calling complete_reasoning_task with model config: {model}")  # Debug print
         
         # Extract tools configuration
