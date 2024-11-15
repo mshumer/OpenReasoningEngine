@@ -42,7 +42,9 @@ def save_successful_chain(
     conversation_history: List[Dict],
     final_response: str,
     cohere_api_key: str,
-    tools: List[Dict],
+    thinking_tools: List[Dict],
+    output_tools: List[Dict],
+    metadata: Dict,
     store_file: str = "successful_chains.json"
 ) -> bool:
     """Save a successful chain to the store."""
@@ -77,8 +79,10 @@ def save_successful_chain(
             "embedding": embedding,
             "conversation_history": processed_history,
             "final_response": final_response,
-            "tools": tools,
-            "timestamp": datetime.now().isoformat()
+            "thinking_tools": thinking_tools,
+            "output_tools": output_tools,
+            "timestamp": datetime.now().isoformat(),
+            "metadata": metadata
         }
         store["chains"].append(chain)
         

@@ -10,6 +10,7 @@ from chain_store import (
     get_similar_chains,
     prepare_examples_messages
 )
+from planner import generate_plan  # Add this import at the top
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -88,11 +89,12 @@ def thinking_loop(
     sandbox: Optional[Sandbox] = None,
     image: Optional[str] = None,
     reflection_mode: bool = False,
-    previous_chains: Optional[List[List[Dict]]] = None
+    previous_chains: Optional[List[List[Dict]]] = None,
+    use_planning: bool = True
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
-    Now supports previous conversation chains.
+    Uses planning from memory to guide reasoning.
     """
     conversation_history = []
     continue_loop = True
@@ -103,15 +105,27 @@ def thinking_loop(
         print(f"{Fore.MAGENTA}│ Starting Thinking Loop{Style.RESET_ALL}")
         if max_reasoning_steps:
             print(f"{Fore.MAGENTA}│ Maximum steps: {max_reasoning_steps}{Style.RESET_ALL}")
-        if previous_chains:
-            print(f"{Fore.MAGENTA}│ Using {len(previous_chains)} previous conversation chains{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
-    # Get similar chains if chain_store_api_key is provided
-    example_messages = []
-    if chain_store_api_key:
+    # Get similar chains and generate plan
+    action_plan = ""
+    if chain_store_api_key and use_planning:
         similar_chains = get_similar_chains(task, chain_store_api_key)
-        example_messages = prepare_examples_messages(similar_chains, tools)
+        if similar_chains:
+            action_plan = generate_plan(
+                task=task,
+                similar_chains=similar_chains,
+                current_tools=tools,
+                api_key=api_key,
+                model=model,
+                api_url=api_url,
+                verbose=verbose,
+                metadata={
+                    "model": model,
+                    "max_steps": max_reasoning_steps,
+                    "reflection_mode": reflection_mode
+                }
+            )
 
     # Add previous chains directly to the conversation history
     if previous_chains:
@@ -128,10 +142,16 @@ def thinking_loop(
     if wolfram_app_id:
         tools_description += "\n3. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
 
+    # Include the generated plan in the system message
+    plan_section = ""
+    if action_plan:
+        plan_section = f"\n<SUGGESTED_APPROACH_BASED_ON_SIMILAR_TASKS>\n{action_plan}\n</SUGGESTED_APPROACH_BASED_ON_SIMILAR_TASKS>\n"
+
     system_message = {
         'role': 'system',
         'content': (
             f"<CURRENT_TASK>\n{task}\n\n"
+            f"{plan_section}"
             "<INSTRUCTIONS>\n"
             "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
             "Each individual reasoning step should be brief.\n"
@@ -163,16 +183,12 @@ def thinking_loop(
                 "- Great for unit conversions, equations, and factual data\n"
                 if wolfram_app_id else ""
             ) +
-            "\nReturn <DONE> after the last step.\n"
-            + (
-                "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
-                if example_messages else ""
-            )
+            "\nReturn <DONE> after the last step."
         )
     }
 
-    # Add example messages and system message after previous chains
-    full_conversation_history = conversation_history + example_messages + [system_message]
+    # Start with system message and previous chains
+    full_conversation_history = conversation_history + [system_message]
 
     if image:
         full_conversation_history.append({
@@ -425,7 +441,8 @@ def complete_reasoning_task(
     image: Optional[str] = None,
     output_tools: Optional[List[Dict]] = None,
     reflection_mode: bool = False,
-    previous_chains: Optional[List[List[Dict]]] = None
+    previous_chains: Optional[List[List[Dict]]] = None,
+    use_planning: bool = True
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
@@ -557,7 +574,8 @@ def complete_reasoning_task(
         sandbox=sandbox,
         image=image,
         reflection_mode=reflection_mode,
-        previous_chains=previous_chains
+        previous_chains=previous_chains,
+        use_planning=use_planning
     )
 
     # Only request final response if we didn't hit max steps
