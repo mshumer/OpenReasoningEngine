@@ -22,7 +22,7 @@ def call_chat_completions(
         "messages": messages,
         "model": {
             "name": 'gpt-4o-mini',
-            "api_key": '[redacted]',
+            "api_key": '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',
             "url": 'https://openrouter.ai/api/v1/chat/completions'
         },
         "config": {

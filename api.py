@@ -175,7 +175,6 @@ def chat_completions():
     """
     try:
         data = request.get_json()
-        print("Received request data:", json.dumps(data, indent=2))  # Debug print
         
         # Validate basic request structure
         if not isinstance(data.get('messages', []), list):
@@ -205,11 +204,29 @@ def chat_completions():
         
         # Get the current task from the last user message
         task = next(
-            (msg['content'] for msg in reversed(data['messages']) 
+            (msg['content'] if isinstance(msg['content'], str)
+             else msg['content'][0]['content'] if isinstance(msg['content'], list) 
+             else None
+             for msg in reversed(data['messages'])
              if msg['role'] == 'user'),
             None
         )
-        
+
+        # If there's an image url in the last user message, save it as image_url
+        final_user_message = data['messages'][-1]['content']
+        # Image is the item where 'type' is 'image_url'
+        try:
+            image = next((item for item in final_user_message if item.get('type') == 'image_url'), None)
+        except:
+            image = None
+        if image:
+            image_url = image['image_url']['url']
+        else:
+            image_url = None
+
+        # Now remove the final user message from the previous_chains array, as we have the task and image_url
+        previous_chains = previous_chains[:-1]
+
         if not task:
             raise APIError(
                 message="No user message found",
@@ -241,6 +258,7 @@ def chat_completions():
             chain_store_api_key=config.get('chain_store', {}).get('api_key'),
             wolfram_app_id=tools_config.get('wolfram', {}).get('app_id'),
             max_reasoning_steps=reasoning_config.get('max_steps'),
+            image=image_url,
             output_tools=config.get('output_tools'),
             reflection_mode=reasoning_config.get('reflection_mode', False),
             previous_chains=previous_chains,
