@@ -87,10 +87,12 @@ def thinking_loop(
     max_reasoning_steps: Optional[int] = None,
     sandbox: Optional[Sandbox] = None,
     image: Optional[str] = None,
-    reflection_mode: bool = False
+    reflection_mode: bool = False,
+    previous_chains: Optional[List[List[Dict]]] = None
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
+    Now supports previous conversation chains.
     """
     conversation_history = []
     continue_loop = True
@@ -101,6 +103,8 @@ def thinking_loop(
         print(f"{Fore.MAGENTA}│ Starting Thinking Loop{Style.RESET_ALL}")
         if max_reasoning_steps:
             print(f"{Fore.MAGENTA}│ Maximum steps: {max_reasoning_steps}{Style.RESET_ALL}")
+        if previous_chains:
+            print(f"{Fore.MAGENTA}│ Using {len(previous_chains)} previous conversation chains{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Get similar chains if chain_store_api_key is provided
@@ -108,6 +112,11 @@ def thinking_loop(
     if chain_store_api_key:
         similar_chains = get_similar_chains(task, chain_store_api_key)
         example_messages = prepare_examples_messages(similar_chains, tools)
+
+    # Add previous chains directly to the conversation history
+    if previous_chains:
+        for chain in previous_chains:
+            conversation_history.extend(chain)
 
     # Create the system message for the current task
     tools_description = (
@@ -162,8 +171,8 @@ def thinking_loop(
         )
     }
 
-    # Start with example messages and system message in the history
-    full_conversation_history = example_messages + [system_message]
+    # Add example messages and system message after previous chains
+    full_conversation_history = conversation_history + example_messages + [system_message]
 
     if image:
         full_conversation_history.append({
@@ -390,7 +399,7 @@ def thinking_loop(
 
             if any(term in response['content'].lower() for term in termination_phrases):
                 if verbose:
-                    print(f"\n{Fore.MAGENTA}╭─────────────────────────────��────────────{Style.RESET_ALL}")
+                    print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}│ Thinking Loop Complete{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}│ Total Steps: {step_count}{Style.RESET_ALL}")
                     print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
@@ -415,11 +424,13 @@ def complete_reasoning_task(
     max_reasoning_steps: Optional[int] = None,
     image: Optional[str] = None,
     output_tools: Optional[List[Dict]] = None,
-    reflection_mode: bool = False
+    reflection_mode: bool = False,
+    previous_chains: Optional[List[List[Dict]]] = None
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
-    Now supports optional structured output via output_tools and reflection mode.
+    Now supports optional structured output via output_tools, reflection mode,
+    and previous conversation chains.
     """
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
@@ -432,15 +443,13 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}│ Starting Task{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}├──────────────────────────────────────────{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}│ {task}{Style.RESET_ALL}")
+        if previous_chains:
+            print(f"{Fore.MAGENTA}│ With {len(previous_chains)} previous conversation chains{Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Initialize E2B sandbox for Python code execution
-    # Timeout says how long the sandbox can stay alive
-    # You can extend the sandbox lifetime by calling sandbox.set_timeout
-    # to reset the timeout to a new value.
-    timeout = 60 * 10 # 10 minutes
+    timeout = 60 * 10  # 10 minutes
     sandbox = Sandbox(timeout=timeout)
-
 
     # Define thinking tools (internal tools that can be used during reasoning)
     thinking_tools = [
@@ -518,55 +527,20 @@ def complete_reasoning_task(
             }
         })
 
-    # Add output tools description to system message
+    # Add output tools description
     output_tools_description = ""
     if output_tools:
         output_tools_description = "\n\nWhen providing your final response, you can use these output functions (but you don't have access to them during reasoning steps):\n"
         for tool in output_tools:
             output_tools_description += f"- {tool['function']['name']}: {tool['function']['description']}\n"
 
-    # Modify system message to include output tools if provided
-    system_message = {
-        'role': 'system',
-        'content': (
-            f"<CURRENT_TASK>\n{task}\n\n"
-            "<INSTRUCTIONS>\n"
-            "Slow down your thinking by breaking complex questions into multiple reasoning steps.\n"
-            "Each individual reasoning step should be brief.\n"
-            f"{output_tools_description}\n"  # Add output tools description if any
-            "When you need to write or test Python code, use the python tool.\n"
-            "When you need to search the web for information, use the find_datapoint_on_web tool.\n"
-            + (
-                "When you need precise mathematical or scientific computations, use the wolfram tool.\n"
-                if wolfram_app_id else ""
-            ) +
-            "\nWhen searching the web:\n"
-            "- The find_datapoint_on_web tool uses human MTurk workers who do quick research and return what they find\n"
-            "- Only ask simple, factual questions that can be directly looked up\n"
-            "- Queries must be single, straightforward questions - no compound questions\n"
-            "- Do not ask workers to make logical inferences or analyze information\n"
-            "- If a query is rejected, simplify it to ask for just one basic fact\n"
-            "- Keep queries focused on finding specific, verifiable information\n"
-            "- If the worker notes data isn't directly available or makes logic jumps, break down into simpler questions to get just the raw facts and do the analysis yourself\n"
-            "\nWhen writing Python code:\n"
-            "- If your code produces an error, add print statements to debug the issue\n"
-            "- Use assertions/prints to validate inputs, intermediate results, and outputs\n"
-            "- Print the state to see what's happening\n"
-            "- When an error occurs, systematically add checks to identify where the problem is\n"
-            "- Structure your debugging process step by step\n"
-            + (
-                "\nWhen using Wolfram Alpha:\n"
-                "- Use for precise mathematical calculations and scientific data\n"
-                "- Phrase queries clearly and specifically\n"
-                "- Great for unit conversions, equations, and factual data\n"
-                if wolfram_app_id else ""
-            ) +
-            "\nReturn <DONE> after the last step.\n"
-            "The EXAMPLE_TASK(s) above are examples of how to break complex questions into multiple reasoning steps. Use these examples to guide your own thinking for the CURRENT_TASK."
-        )
-    }
+    # Create initial conversation history with previous chains
+    conversation_history = []
+    if previous_chains:
+        for chain in previous_chains:
+            conversation_history.extend(chain)
 
-    # Run thinking loop with only thinking tools
+    # Run thinking loop with thinking tools
     conversation_history = thinking_loop(
         task,
         api_key,
@@ -582,7 +556,8 @@ def complete_reasoning_task(
         max_reasoning_steps=max_reasoning_steps,
         sandbox=sandbox,
         image=image,
-        reflection_mode=reflection_mode
+        reflection_mode=reflection_mode,
+        previous_chains=previous_chains
     )
 
     # Only request final response if we didn't hit max steps
@@ -616,6 +591,14 @@ def complete_reasoning_task(
             api_url,
             verbose
         )
+        
+        # Add the final response to the conversation history
+        assistant_message = {
+            'role': 'assistant',
+            'content': final_response.get('content'),
+            'tool_calls': final_response.get('tool_calls', None)
+        }
+        conversation_history.append(assistant_message)
     else:
         # Use the last assistant message as the final response
         final_response = next(
@@ -648,6 +631,7 @@ def complete_reasoning_task(
     # Log conversation history if logging is enabled
     if log_conversation:
         # Remove example chains from conversation history by removing everything prior to the bottom-most system message
+        ### THIS MAY NOT WORK IF WE'RE INJECTING SYSTEM MESSAGES INTO THE CHAIN (I THINK WE'RE DOING THIS, SO IT'S WORTH REVISITING)!
         bottom_system_message_index = next((i for i, msg in enumerate(reversed(conversation_history)) if msg.get('role') == 'system'), None)
         if bottom_system_message_index is not None:
             conversation_history = conversation_history[-bottom_system_message_index:]
@@ -667,7 +651,7 @@ def complete_reasoning_task(
             'top_p': top_p,
             'max_tokens': max_tokens,
             'api_url': api_url,
-            'conversation_history': conversation_history,
+            'reasoning_chain': conversation_history,
             'final_response': final_response_content,
             'final_response_tool_calls': final_response_tool_calls,
             'thinking_tools': thinking_tools,
