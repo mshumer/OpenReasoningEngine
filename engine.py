@@ -4,6 +4,8 @@ from e2b_code_interpreter import Sandbox
 from typing import List, Dict, Optional, Tuple, Union
 from colorama import init, Fore, Style
 from tools import execute_tool, clear_interpreter_state
+from api_utils import send_message_to_api  # Updated import
+from beam_search import process_beam_search_step  # Now this will work
 import json
 from datetime import datetime
 from chain_store import (
@@ -14,64 +16,6 @@ from planner import generate_plan  # Add this import at the top
 
 # Initialize colorama for cross-platform colored output
 init()
-
-def send_message_to_api(
-    task: str,
-    messages: List[Dict],
-    api_key: str,
-    tools: List[Dict],
-    model: str = 'gpt-4o-mini',
-    temperature: float = 0.7,
-    top_p: float = 1.0,
-    max_tokens: int = 500,
-    api_url: str = 'https://api.openai.com/v1/chat/completions',
-    verbose: bool = False,
-    is_first_step: bool = False
-) -> Dict:
-    """
-    Send a message to the OpenAI API and return the assistant's response.
-    """
-    if verbose and is_first_step:
-        print(f"\n{Fore.CYAN}╭──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│ Sending Request to API{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}├──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│ Model: {Style.RESET_ALL}{model}")
-        print(f"{Fore.CYAN}│ URL: {Style.RESET_ALL}{api_url}")
-        print(f"{Fore.CYAN}│ Temperature: {Style.RESET_ALL}{temperature}")
-        print(f"{Fore.CYAN}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
-
-    try:
-        response = requests.post(
-            api_url,
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'model': model,
-                'messages': messages,
-                'tools': tools,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'top_p': top_p,
-            },
-            timeout=60
-        )
-        print(f"Response: {response.json()}")
-
-        if verbose:
-            print(f"{Fore.YELLOW}Response status: {response.status_code}{Style.RESET_ALL}")
-
-        if response.status_code != 200:
-            raise Exception(
-                f"API request failed with status {response.status_code}: {response.text}"
-            )
-
-        response_data = response.json()
-        return response_data['choices'][0]['message']
-
-    except Exception as error:
-        raise Exception(f'Error sending message to API: {str(error)}')
 
 def thinking_loop(
     task: str,
@@ -90,15 +34,15 @@ def thinking_loop(
     image: Optional[str] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    beam_search_enabled: bool = False,
+    num_candidates: int = 3
 ) -> List[Dict]:
-    """
-    Execute the thinking loop and return the conversation history.
-    Uses planning from memory to guide reasoning.
-    """
+    """Execute the thinking loop with optional beam search."""
     conversation_history = []
     continue_loop = True
     step_count = 1
+    current_branch = 'root'  # Start with root branch
 
     if verbose:
         print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
@@ -208,35 +152,97 @@ def thinking_loop(
         })
 
     while continue_loop:
-        # Check if we've exceeded max steps
-        if max_reasoning_steps and step_count > max_reasoning_steps:
-            if verbose:
-                print(f"\n{Fore.YELLOW}Maximum reasoning steps ({max_reasoning_steps}) reached. Forcing completion.{Style.RESET_ALL}")
+        if verbose:
+            print(f"\n{Fore.BLUE}Step {step_count}{Style.RESET_ALL}")
+            print(f"{Fore.BLUE}{'─' * 40}{Style.RESET_ALL}")
 
-            # Add a system message explaining the forced stop
-            force_stop_message = {
-                'role': 'system',
-                'content': (
-                    f"Maximum reasoning steps ({max_reasoning_steps}) reached. "
+        response = None  # Initialize response variable
+        
+        if beam_search_enabled:
+            try:
+                best_candidate, new_branch = process_beam_search_step(
+                    task=task,
+                    conversation_history=full_conversation_history,
+                    num_candidates=num_candidates,
+                    current_branch=current_branch,
+                    api_key=api_key,
+                    model=model,
+                    api_url=api_url,
+                    tools=tools,
+                    sandbox=sandbox,
+                    verbose=verbose
                 )
-            }
-            conversation_history.append(force_stop_message)
-            full_conversation_history.append(force_stop_message)
-
-            # Add a user message requesting the final answer
-            final_user_message = {
-                'role': 'user',
-                'content': (
-                    'Based on your reasoning so far, provide your final answer to the CURRENT_TASK. '
-                    'Make your response complete and self-contained since this will be shown to the user.'
-                    "Please provide your final answer based on what you've learned so far. "
-                    "Do not return <DONE>, and **you are not allowed to use any tools**. Just respond with your final answer."
+                current_branch = new_branch
+                
+                # Set response to best_candidate
+                response = best_candidate
+                
+                # Add the best candidate to both conversation histories
+                conversation_history.append(best_candidate)
+                full_conversation_history.append(best_candidate)
+                
+                # Check for tool results
+                if 'tool_result' in best_candidate:
+                    tool_message = {
+                        'role': 'tool',
+                        'content': str(best_candidate['tool_result'])
+                    }
+                    conversation_history.append(tool_message)
+                    full_conversation_history.append(tool_message)
+                
+            except Exception as e:
+                if verbose:
+                    print(f"{Fore.RED}Beam search error: {str(e)}{Style.RESET_ALL}")
+                # Fall back to normal mode for this step
+                response = send_message_to_api(
+                    task,
+                    full_conversation_history,
+                    api_key,
+                    tools,
+                    model,
+                    temperature,
+                    top_p,
+                    max_tokens,
+                    api_url,
+                    verbose,
+                    is_first_step=(step_count == 1)
                 )
-            }
-            conversation_history.append(final_user_message)
-            full_conversation_history.append(final_user_message)
+                
+        else:
+            # Determine which message to send based on reflection mode and step count
+            if reflection_mode and step_count % 2 == 0:
+                # Even steps in reflection mode are for reflection
+                user_message = {
+                    'role': 'user',
+                    'content': (
+                        'Reflect on your last step — check for mistakes. '
+                        'Consider:\n'
+                        '1. Are your assumptions valid and well-justified?\n'
+                        '2. Did you make any logical errors or jumps in reasoning?\n'
+                        '3. Is there a more effective or efficient approach?\n'
+                        'Explain your analysis, whether you find issues or confirm the step was sound.\n'
+                        'Do not make a snap decision. Think carefully before deciding if the step is free of mistakes.\n'
+                        'Be brief and to the point.\n'
+                        'If this is the final step, return <DONE>.'
+                    )
+                } # Note — these reflection steps are often a bit long, which may lead to the non-reflection steps doing more work per step than they should. Figure this out later.
+            else:
+                # Odd steps or non-reflection mode use the original message
+                user_message = {
+                    'role': 'user',
+                    'content': (
+                        'Think about your next reasoning step to perform the CURRENT_TASK. '
+                        'Return just the next step. '
+                        'Remember, steps should be very brief. '
+                        'If this is the final step, return <DONE>.'
+                    )
+                }
 
-            # Get final response when hitting max steps
+            # Add to both conversation histories
+            conversation_history.append(user_message)
+            full_conversation_history.append(user_message)
+
+            # Get response from AI API
             response = send_message_to_api(
                 task,
                 full_conversation_history,
@@ -247,11 +253,13 @@ def thinking_loop(
                 top_p,
                 max_tokens,
                 api_url,
-                verbose
+                verbose,
+                is_first_step=(step_count == 1)
             )
-            print('Final response:', response)
 
-            # Add the final response to histories
+        # Now response is guaranteed to be defined before this point
+        if response:
+            # Add assistant's response to both histories
             assistant_message = {
                 'role': 'assistant',
                 'content': response.get('content'),
@@ -261,149 +269,82 @@ def thinking_loop(
             full_conversation_history.append(assistant_message)
 
             if verbose and response.get('content'):
-                print(f"\n{Fore.GREEN}Final Response after max steps:{Style.RESET_ALL}")
-                print(response.get('content'))
+                print(f"\n{Fore.GREEN}Assistant: {Style.RESET_ALL}{response['content']}")
 
-            # Return here to skip the additional final response request
-            return full_conversation_history
+            # Handle tool calls
+            if 'tool_calls' in response and response['tool_calls']:
+                for tool_call in response['tool_calls']:
+                    if verbose:
+                        print(f"\n{Fore.YELLOW}╭──────────────────────────────────────────{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}│ Tool Call Detected{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}├──────────────────────────────────────────{Style.RESET_ALL}")
 
-        if verbose:
-            print(f"\n{Fore.BLUE}Step {step_count}{Style.RESET_ALL}")
-            print(f"{Fore.BLUE}{'─' * 40}{Style.RESET_ALL}")
-
-        # Determine which message to send based on reflection mode and step count
-        if reflection_mode and step_count % 2 == 0:
-            # Even steps in reflection mode are for reflection
-            user_message = {
-                'role': 'user',
-                'content': (
-                    'Reflect on your last step — check for mistakes. '
-                    'Consider:\n'
-                    '1. Are your assumptions valid and well-justified?\n'
-                    '2. Did you make any logical errors or jumps in reasoning?\n'
-                    '3. Is there a more effective or efficient approach?\n'
-                    'Explain your analysis, whether you find issues or confirm the step was sound.\n'
-                    'Do not make a snap decision. Think carefully before deciding if the step is free of mistakes.\n'
-                    'Be brief and to the point.\n'
-                    'If this is the final step, return <DONE>.'
-                )
-            } # Note — these reflection steps are often a bit long, which may lead to the non-reflection steps doing more work per step than they should. Figure this out later.
-        else:
-            # Odd steps or non-reflection mode use the original message
-            user_message = {
-                'role': 'user',
-                'content': (
-                    'Think about your next reasoning step to perform the CURRENT_TASK. '
-                    'Return just the next step. '
-                    'Remember, steps should be very brief. '
-                    'If this is the final step, return <DONE>.'
-                )
-            }
-
-        # Add to both conversation histories
-        conversation_history.append(user_message)
-        full_conversation_history.append(user_message)
-
-        # Get response from AI API
-        response = send_message_to_api(
-            task,
-            full_conversation_history,
-            api_key,
-            tools,
-            model,
-            temperature,
-            top_p,
-            max_tokens,
-            api_url,
-            verbose,
-            is_first_step=(step_count == 1)
-        )
-
-        # Add assistant's response to both histories
-        assistant_message = {
-            'role': 'assistant',
-            'content': response.get('content'),
-            'tool_calls': response.get('tool_calls', None)
-        }
-        conversation_history.append(assistant_message)
-        full_conversation_history.append(assistant_message)
-
-        if verbose and response.get('content'):
-            print(f"\n{Fore.GREEN}Assistant: {Style.RESET_ALL}{response['content']}")
-
-        # Handle tool calls
-        if 'tool_calls' in response and response['tool_calls']:
-            for tool_call in response['tool_calls']:
-                if verbose:
-                    print(f"\n{Fore.YELLOW}╭──────────────────────────────────────────{Style.RESET_ALL}")
-                    print(f"{Fore.YELLOW}│ Tool Call Detected{Style.RESET_ALL}")
-                    print(f"{Fore.YELLOW}├──────────────────────────────────────────{Style.RESET_ALL}")
-
-                try:
-                    # Execute tool and get result
-                    tool_name = tool_call['function']['name']
-
-                    # Add error handling for argument parsing
                     try:
-                        if 'arguments' not in tool_call['function'] or not tool_call['function']['arguments']:
-                            error_msg = "No arguments provided in tool call"
+                        # Execute tool and get result
+                        tool_name = tool_call['function']['name']
+
+                        # Add error handling for argument parsing
+                        try:
+                            if 'arguments' not in tool_call['function'] or not tool_call['function']['arguments']:
+                                error_msg = "No arguments provided in tool call"
+                                if verbose:
+                                    print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
+                                raise ValueError(error_msg)
+
+                            arguments = json.loads(tool_call['function']['arguments'])
+
+                        except json.JSONDecodeError as e:
+                            error_msg = f"Invalid JSON in tool arguments: {tool_call['function'].get('arguments', 'NO_ARGS')}"
                             if verbose:
                                 print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
+                                print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
                             raise ValueError(error_msg)
 
-                        arguments = json.loads(tool_call['function']['arguments'])
-
-                    except json.JSONDecodeError as e:
-                        error_msg = f"Invalid JSON in tool arguments: {tool_call['function'].get('arguments', 'NO_ARGS')}"
                         if verbose:
-                            print(f"{Fore.RED}{error_msg}{Style.RESET_ALL}")
-                            print(f"{Fore.RED}Error: {str(e)}{Style.RESET_ALL}")
-                        raise ValueError(error_msg)
+                            print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
+                            print(f"{Fore.YELLOW}│ Arguments: {Style.RESET_ALL}{json.dumps(arguments, indent=2)}")
 
-                    if verbose:
-                        print(f"{Fore.YELLOW}│ Tool: {Style.RESET_ALL}{tool_name}")
-                        print(f"{Fore.YELLOW}│ Arguments: {Style.RESET_ALL}{json.dumps(arguments, indent=2)}")
-
-                    result = execute_tool(
-                        tool_name,
-                        arguments,
-                        task=task,
-                        api_key=api_key,
-                        model=model,
-                        api_url=api_url,
-                        wolfram_app_id=wolfram_app_id,
-                        sandbox=sandbox,
-                    )
-
-                    # Add tool result to both histories
-                    tool_message = {
-                        'role': 'tool',
-                        'tool_call_id': tool_call['id'],
-                        'content': str(result)
-                    }
-                    conversation_history.append(tool_message)
-                    full_conversation_history.append(tool_message)
-
-                    if verbose:
-                        print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
-                        print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
-
-                except Exception as e:
-                    error_msg = str(e)
-                    if verbose:
-                        print(f"{Fore.RED}Error executing tool: {error_msg}{Style.RESET_ALL}")
-
-                    # Add error message to conversation history so model can correct its approach
-                    error_message = {
-                        'role': 'system',
-                        'content': (
-                            f"Error using {tool_name} tool: {error_msg}\n"
-                            "Please correct your approach and try again."
+                        result = execute_tool(
+                            tool_name,
+                            arguments,
+                            task=task,
+                            api_key=api_key,
+                            model=model,
+                            api_url=api_url,
+                            wolfram_app_id=wolfram_app_id,
+                            sandbox=sandbox,
                         )
-                    }
-                    conversation_history.append(error_message)
-                    full_conversation_history.append(error_message)
-                    continue
+
+                        # Add tool result to both histories
+                        tool_message = {
+                            'role': 'tool',
+                            'tool_call_id': tool_call['id'],
+                            'content': str(result)
+                        }
+                        conversation_history.append(tool_message)
+                        full_conversation_history.append(tool_message)
+                        print(full_conversation_history)
+
+                        if verbose:
+                            print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
+                            print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
+
+                    except Exception as e:
+                        error_msg = str(e)
+                        if verbose:
+                            print(f"{Fore.RED}Error executing tool: {error_msg}{Style.RESET_ALL}")
+
+                        # Add error message to conversation history so model can correct its approach
+                        error_message = {
+                            'role': 'system',
+                            'content': (
+                                f"Error using {tool_name} tool: {error_msg}\n"
+                                "Please correct your approach and try again."
+                            )
+                        }
+                        conversation_history.append(error_message)
+                        full_conversation_history.append(error_message)
+                        continue
 
         # Check for termination conditions
         if response.get('content'):
@@ -423,7 +364,7 @@ def thinking_loop(
 
         step_count += 1
 
-    return full_conversation_history
+    return conversation_history
 
 def complete_reasoning_task(
     task: str,
@@ -442,13 +383,12 @@ def complete_reasoning_task(
     output_tools: Optional[List[Dict]] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    beam_search_enabled: bool = False,
+    num_candidates: int = 3
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
-    """
-    Execute the reasoning task and return the final response.
-    Now supports optional structured output via output_tools, reflection mode,
-    and previous conversation chains.
-    """
+    """Execute the reasoning task with optional beam search."""
+    
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
 
@@ -559,15 +499,15 @@ def complete_reasoning_task(
 
     # Run thinking loop with thinking tools
     conversation_history = thinking_loop(
-        task,
-        api_key,
-        thinking_tools,
-        model,
-        temperature,
-        top_p,
-        max_tokens,
-        api_url,
-        verbose,
+        task=task,
+        api_key=api_key,
+        tools=thinking_tools,
+        model=model,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        api_url=api_url,
+        verbose=verbose,
         chain_store_api_key=chain_store_api_key,
         wolfram_app_id=wolfram_app_id,
         max_reasoning_steps=max_reasoning_steps,
@@ -575,7 +515,9 @@ def complete_reasoning_task(
         image=image,
         reflection_mode=reflection_mode,
         previous_chains=previous_chains,
-        use_planning=use_planning
+        use_planning=use_planning,
+        beam_search_enabled=beam_search_enabled,
+        num_candidates=num_candidates
     )
 
     # Only request final response if we didn't hit max steps
