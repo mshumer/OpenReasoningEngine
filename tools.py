@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Union, Optional, Set
 import sys
 from io import StringIO
 import traceback
@@ -19,9 +19,24 @@ from scipy import stats
 from sklearn import preprocessing
 import math
 from e2b_code_interpreter import Sandbox
+import gc
+import time
 
 # Dictionary of interpreter states, keyed by task hash
 interpreter_states = {}
+
+# Track active branches and their creation time
+active_branches: Dict[str, float] = {}
+marked_for_cleanup: Set[str] = set()
+
+# Add at the top with other global variables
+interpreter_branches: Dict[str, Dict] = {
+    'root': {
+        'parent': None,
+        'commands': [],
+        'sandbox': None
+    }
+}
 
 def get_task_hash(task: str) -> str:
     """Generate a unique hash for a task."""
@@ -244,3 +259,94 @@ def execute_tool(
         parameters = {**parameters, "wolfram_app_id": wolfram_app_id}
 
     return tool_func(**parameters)
+
+def cleanup_unused_branches(
+    current_branch_id: str,
+    max_inactive_time: float = 300  # 5 minutes
+) -> None:
+    """Clean up inactive branches and their sandboxes."""
+    current_time = time.time()
+    
+    # Mark branches for cleanup
+    for branch_id, creation_time in active_branches.items():
+        if (branch_id != current_branch_id and 
+            current_time - creation_time > max_inactive_time):
+            marked_for_cleanup.add(branch_id)
+    
+    # Cleanup marked branches
+    for branch_id in marked_for_cleanup:
+        if branch_id in interpreter_branches:
+            # Close sandbox if it exists
+            if interpreter_branches[branch_id]['sandbox']:
+                interpreter_branches[branch_id]['sandbox'].close()
+            
+            # Remove branch data
+            del interpreter_branches[branch_id]
+            del active_branches[branch_id]
+    
+    marked_for_cleanup.clear()
+    gc.collect()  # Force garbage collection
+
+def create_branch(parent_id: str) -> str:
+    """Create new branch with automatic cleanup tracking."""
+    branch_id = f"branch_{len(interpreter_branches)}"
+    interpreter_branches[branch_id] = {
+        'parent': parent_id,
+        'commands': get_branch_history(parent_id).copy(),
+        'sandbox': None
+    }
+    active_branches[branch_id] = time.time()
+    return branch_id
+
+def get_branch_history(branch_id: str) -> List[str]:
+    """Get the complete command history for a branch."""
+    history = []
+    current = branch_id
+    
+    while current is not None:
+        if current not in interpreter_branches:
+            break
+            
+        branch = interpreter_branches[current]
+        history = branch['commands'] + history
+        current = branch['parent']
+        
+    return history
+
+def record_command(branch_id: str, command: str) -> None:
+    """Record a command in a branch's history."""
+    if branch_id in interpreter_branches:
+        interpreter_branches[branch_id]['commands'].append(command)
+
+def cleanup_sandbox(sandbox: Optional[Sandbox]) -> None:
+    """Safely cleanup a sandbox instance."""
+    if sandbox:
+        try:
+            sandbox.close()
+        except Exception as e:
+            print(f"Error cleaning up sandbox: {str(e)}")
+
+def execute_branch_history(branch_id: str, sandbox: Sandbox) -> None:
+    """Execute all commands in a branch's history."""
+    history = get_branch_history(branch_id)
+    for command in history:
+        try:
+            execute_tool(
+                tool_name="python",
+                parameters={"code": command},
+                sandbox=sandbox
+            )
+        except Exception as e:
+            print(f"Error executing command from history: {str(e)}")
+            raise
+
+def cleanup_all_branches() -> None:
+    """Clean up all branches and their sandboxes."""
+    for branch_id in list(interpreter_branches.keys()):
+        if branch_id != 'root':
+            cleanup_sandbox(interpreter_branches[branch_id].get('sandbox'))
+            del interpreter_branches[branch_id]
+    
+    active_branches.clear()
+    marked_for_cleanup.clear()
+    gc.collect()
