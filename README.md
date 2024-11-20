@@ -152,3 +152,15 @@ Contributions are welcome if they:
 - 📈 Include clear performance metrics
 
 Quality-of-life improvements are also appreciated.
+
+---
+
+## Acknowledgements
+Thank you to the following folks who provided advice, feedback, ideas, and helped me implement and test the initial versions of OpenReasoningEngine:
+- [Steve Ickman](https://x.com/stevenic)
+- [Vasek Mlejnsky](https://x.com/mlejva)
+- [Josh Bickett](https://x.com/josh_bickett)
+- [Aidan Gomez](https://x.com/aidangomez)
+- [Alec Velikanov](https://x.com/alecvxyz) (Alex, imo)
+
+[Follow me on X](https://x.com/mattshumer_) for updates on this and other AI things I'm working on.
