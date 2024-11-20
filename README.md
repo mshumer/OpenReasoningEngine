@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 OpenReasoningEngine
+# OpenReasoningEngine
 
 **While AI labs are quietly building closed reasoning systems,  
 we can create something more powerful together in the open.**
@@ -35,7 +35,7 @@ And over time, as users save successful reasoning chains, we will be able to tra
    &nbsp;&nbsp;&nbsp;&nbsp;Implements mixture-of-agents for ensemble decision making
 
 🔹 **Beam Search**  
-   &nbsp;&nbsp;&nbsp;&nbsp;Sample multiple next reasoning step candidates at each turn, and choose the best
+   &nbsp;&nbsp;&nbsp;&nbsp;Sample multiple next reasoning step candidates at each turn, and choose the best (soon to be updated with forking Python interpreters to significantly improve the system)
 
 🔹 **Self-Reflection**  
    &nbsp;&nbsp;&nbsp;&nbsp;Force the AI to validate reasoning steps as it thinks
