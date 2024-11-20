@@ -90,7 +90,7 @@ Running the code as-is will work — I've chosen reasonable default settings. I
 #### 1. Internal Tools
 - Used during the reasoning process
 - Default setup includes:
-  - Python interpreter
+  - Python interpreter (with guidance to steer the LLM to add assertions, prints, etc. to improve performance and catch issues)
   - Web search (Perplexity API)
   - Wolfram Alpha (optional)
 - Customizable based on your needs
