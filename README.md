@@ -34,6 +34,9 @@ And over time, as users save successful reasoning chains, we will be able to tra
 🔹 **MoA**  
    &nbsp;&nbsp;&nbsp;&nbsp;Implements mixture-of-agents for ensemble decision making
 
+🔹 **Beam Search**  
+   &nbsp;&nbsp;&nbsp;&nbsp;Sample multiple next reasoning step candidates at each turn, and choose the best
+
 🔹 **Self-Reflection**  
    &nbsp;&nbsp;&nbsp;&nbsp;Force the AI to validate reasoning steps as it thinks
 
@@ -76,6 +79,9 @@ source .env
 Two options available:
 - Direct execution: `python main.py`
 - API server: `python api.py` (starts a Flask API endpoint)
+
+## Config Options
+Running the code as-is will work — I've chosen reasonable default settings. If you'd like to customize the way the system reasons, here are all of the settings you can configure: [LINK HERE!]
 
 ### Tool System
 
