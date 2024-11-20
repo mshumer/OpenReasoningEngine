@@ -13,7 +13,7 @@ This repo serves as a modular, open-source test-time compute engine — anyone i
 
 And over time, as users save successful reasoning chains, we will be able to train models designed to take full advantage of this system.
 
-*Works with any OpenAI-compatible endpoint/model that supports function calling.*
+*Works with any OpenAI-compatible endpoint/model that supports function calling, and serves as a great base for building many types of reasoning systems.*
 
 > ### ⚠️ Important Note
 > **We are going to be very selective about what we add to this system. If an approach doesn't have a clear path to increasing the capabilities of the system, we will not add it.**
@@ -144,6 +144,14 @@ When `verbose=True`, the engine displays:
 - 📋 Step-by-step reasoning progress
 
 This makes it easy to see what's going on under the hood and diagnose issues.
+
+---
+
+## 🧪 Benchmarking
+
+I've open-sourced a very simple LLM evaluation harness that you can use with this repo to test different setups and understand how well approaches work.
+
+[Try it here.](https://github.com/mshumer/MattEval)
 
 ---
 
