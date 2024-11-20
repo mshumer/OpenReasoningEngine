@@ -12,6 +12,7 @@ from chain_store import (
 )
 from planner import generate_plan  # Add this import at the top
 from call_ai import send_message_to_api, generate_best_candidate
+from helpers import validate_conversation
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -428,8 +429,15 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Initialize E2B sandbox for Python code execution
-    timeout = 60 * 10  # 10 minutes
-    sandbox = Sandbox(timeout=timeout)
+    timeout = 60 * 8  # 8 minutes
+    for attempt in range(3):  # Try 3 times
+        try:
+            sandbox = Sandbox(timeout=timeout)
+            break  # If successful, exit the loop
+        except Exception as e:
+            if attempt == 2:  # If this was the last attempt
+                raise Exception(f"Failed to create sandbox after 3 attempts. Last error: {e}")
+            continue
 
     # Define thinking tools (internal tools that can be used during reasoning)
     thinking_tools = [
@@ -562,18 +570,36 @@ def complete_reasoning_task(
             print(f"{Fore.CYAN}Requesting final response...{Style.RESET_ALL}\n")
 
         # Get final response with output tools if provided
-        final_response = send_message_to_api(
-            task,
-            conversation_history,
-            api_key,
-            output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
-            model,
-            temperature,
-            top_p,
-            max_tokens,
-            api_url,
-            verbose
-        )
+
+        # Wrapping in try/except to catch any errors and try again with validated conversation history — for now... just because I'm not 100% sure if the validation is working and I don't want to risk messing up already solid chains
+        try:
+            final_response = send_message_to_api(
+                task,
+                conversation_history,
+                api_key,
+                output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose
+            )
+        except Exception as e:
+            print(f"{Fore.RED}Error sending final response: {e}{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}Trying again with validated conversation history...{Style.RESET_ALL}")
+            final_response = send_message_to_api(
+                task,
+                validate_conversation(conversation_history),
+                api_key,
+                output_tools if output_tools else thinking_tools,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose
+            )
         
         # Add the final response to the conversation history
         assistant_message = {
