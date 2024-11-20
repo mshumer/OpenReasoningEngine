@@ -77,10 +77,13 @@ def generate_plan(
     Generate a plan of action based on similar chains from memory.
     Takes into account available tools and other context.
     """
-    from engine import send_message_to_api
+    from call_ai import send_message_to_api
     
     if verbose:
         print(f"\n{Fore.CYAN}Extracting patterns from {len(similar_chains)} similar chains...{Style.RESET_ALL}")
+        # Print the tasks of the similar chains
+        for i, chain in enumerate(similar_chains, 1):
+            print(f"Example {i}: {chain.get('task', 'Unknown task')}")
     
     # Format current context
     current_context = f"Current Task: {task}\n"
@@ -112,12 +115,35 @@ def generate_plan(
         },
         {
             'role': 'user',
+            'content': "[REDACTED]" # Make the AI think there was an example input here — we're just trying to teach it how to generate a solid plan
+        },
+        {
+            'role': 'assistant',
+            'content': """For the current task of designing an generalist AI search agent that uses OpenAI-compatible APIs, we can learn from the example where we built a LLM-based voice chatbot.
+
+            For API integration, we successfully used the OpenRouter endpoint (https://openrouter.ai/api/v1/chat/completions) with these key parameters:
+            - model: "meta-llama/Meta-Llama-3-8B-Instruct"
+            - messages: [{"role": "user", "content": "Hello, how are you?"}]
+            - tools: []
+            - max_tokens: 1000
+            - temperature: 0.7
+            - top_p: 1.0
+            
+            One key learning was about model selection - while the chatbot needed low latency, an agent typically benefits from a more capable model since response time is less critical.
+
+            We also discovered important lessons about prompt engineering. Our experience showed that shorter, precise prompts consistently outperformed longer ones. The initial iterations suffered from vague prompting that led to unfocused responses.
+            
+            A particularly effective pattern we uncovered was using function calling to enable tool usage. This approach could be valuable for integrating search capabilities, particularly by combining function calling with SERP APIs for web access.
+            """
+        },
+        {
+            'role': 'user',
             'content': (
                 f"{current_context}\n"
                 f"Similar Examples:{examples_context}\n\n"
                 "Based on these examples and the available tools/resources, outline a strategic approach for this task:\n"
                 "1. How would you break this down into clear steps?\n"
-                "2. Which tools would be most valuable at each stage?\n"
+                "2. Which tools (and, if applicable, which libraries) would be most valuable at each stage?\n"
                 "3. What key checkpoints or validation should be included?\n"
                 "4. What patterns from similar past tasks could guide the approach?\n\n"
                 "Focus on the process and methodology rather than specific implementation details.\n"

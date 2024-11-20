@@ -45,7 +45,7 @@ def send_message_to_api(
                 json={
                     'model': model,
                     'messages': messages,
-                    'tools': tools,
+                    'tools': tools if tools else None,
                     'max_tokens': max_tokens,
                     'temperature': temperature,
                     'top_p': top_p,
