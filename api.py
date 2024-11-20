@@ -69,6 +69,9 @@ def reason():
         output_tools = data.get('output_tools')
         reflection_mode = data.get('reflection_mode', False)
         previous_chains = data.get('previous_chains', [])  # New parameter
+        num_candidates = data.get('num_candidates', 1)
+        beam_search_enabled = data.get('beam_search_enabled', False)
+
 
         # Run reasoning
         response, history, thinking_tools, output_tools = complete_reasoning_task(
@@ -86,7 +89,10 @@ def reason():
             image=image,
             output_tools=output_tools,
             reflection_mode=reflection_mode,
-            previous_chains=previous_chains
+            previous_chains=previous_chains,
+            use_planning=False,
+            beam_search_enabled=beam_search_enabled,
+            num_candidates=num_candidates
         )
                 
         return jsonify({

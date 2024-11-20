@@ -11,7 +11,7 @@ from chain_store import (
     prepare_examples_messages
 )
 from planner import generate_plan  # Add this import at the top
-from call_ai import send_message_to_api
+from call_ai import send_message_to_api, generate_best_candidate
 
 # Initialize colorama for cross-platform colored output
 init()
@@ -33,7 +33,9 @@ def thinking_loop(
     image: Optional[str] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    beam_search_enabled: bool = False,
+    num_candidates: int = 1
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -248,19 +250,35 @@ def thinking_loop(
         full_conversation_history.append(user_message)
 
         # Get response from AI API
-        response = send_message_to_api(
-            task,
-            full_conversation_history,
-            api_key,
-            tools,
-            model,
-            temperature,
-            top_p,
-            max_tokens,
-            api_url,
-            verbose,
-            is_first_step=(step_count == 1)
-        )
+        if beam_search_enabled:
+            response = generate_best_candidate(
+                task,
+                full_conversation_history,
+                api_key,
+                tools,
+                num_candidates,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose,
+                is_first_step=(step_count == 1)
+            )
+        else:
+            response = send_message_to_api(
+                task,
+                full_conversation_history,
+                api_key,
+                tools,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose,
+                is_first_step=(step_count == 1)
+            )
 
         # Add assistant's response to both histories
         assistant_message = {
@@ -385,7 +403,9 @@ def complete_reasoning_task(
     output_tools: Optional[List[Dict]] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    beam_search_enabled: bool = False,
+    num_candidates: int = 1
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
@@ -518,7 +538,9 @@ def complete_reasoning_task(
         image=image,
         reflection_mode=reflection_mode,
         previous_chains=previous_chains,
-        use_planning=use_planning
+        use_planning=use_planning,
+        beam_search_enabled=beam_search_enabled,
+        num_candidates=num_candidates
     )
 
     # Only request final response if we didn't hit max steps
