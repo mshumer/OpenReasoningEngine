@@ -13,6 +13,8 @@ This repo serves as a modular, open-source test-time compute engine — anyone i
 
 And over time, as users save successful reasoning chains, we will be able to train models designed to take full advantage of this system.
 
+*Works with any OpenAI-compatible endpoint/model that supports function calling.*
+
 > ### ⚠️ Important Note
 > **We are going to be very selective about what we add to this system. If an approach doesn't have a clear path to increasing the capabilities of the system, we will not add it.**
 
