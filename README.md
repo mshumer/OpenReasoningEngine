@@ -1,142 +1,102 @@
 # OpenReasoningEngine
 
-This repo serves as a modular, open-source test-time compute engine — anyone in the community with a useful idea to improve model capabilities is encouraged to add their approach to the system. As many approaches are added, this system will enable users to compose them to drastically increase capabilities.
+While AI labs are quietly building closed reasoning systems, we can create something more powerful together in the open.
+
+This repo serves as a modular, open-source test-time compute engine — anyone in the community with a useful idea to improve model capabilities is encouraged to add their approach to the system. As approaches are added, this system will enable users to compose them to drastically increase capabilities.
+
+And over time, as users save successful reasoning chains, we will be able to train models designed to take full advantage of this system.
 
 > **We are going to be very selective about what we add to this system. If an approach doesn't have a clear path to increasing the capabilities of the system, we will not add it.**
 
-## Initial Features
+## Initial System
 
-- Step-by-step reasoning with integrated tools (Python interpreter, web search via Perplexity, Wolfram Alpha)
-- Planning from memory (continual learning from past experiences)
-- Parallel ensemble processing with multiple models (mixture-of-agents)
-- Reflection mode for self-checking reasoning steps
-- Planning system that learns from similar past tasks
-- Model-agnostic API supporting multiple providers (OpenAI, Anthropic, etc.)
-- Image input, function calling, multi-turn conversations
+- **Step-by-Step Reasoning**: Executes reasoning one step per turn with integrated tools:
+  - Python interpreter
+  - Web search (via Perplexity)
+  - Wolfram Alpha integration
+- **Memory-Based Planning**: Continually learns and adapts from past experiences
+- **MoA**: Implements mixture-of-agents for ensemble decision making
+- **Self-Reflection**: Force the AI to validate reasoning steps as it thinks
+- **Flexible Model Support**: Model-agnostic API supporting any OpenAI-compatible provider (OpenAI, Anthropic, etc.)
+- **Rich Input/Output**: Handles image input, **function calling**, and multi-turn conversations
 
 ## Installation
 
+1. Clone the repository and install dependencies:
 ```bash
 git clone https://github.com/mshumer/OpenReasoningEngine.git
 cd OpenReasoningEngine
 pip install -r requirements.txt
 ```
 
+2. Set up API keys:
+- Get API keys from [OpenRouter](https://openrouter.ai/) and [E2B](https://e2b.dev/)
+- Create a `.env` file with your keys:
+```env
+E2B_API_KEY="your_e2b_key_here"
+OPENROUTER_API_KEY="your_openrouter_key_here"
+```
+
+3. Load environment variables:
+```bash
+source .env
+```
+
 ## Usage
 
-### Basic Mode
+### Running the Engine
 
-Use a single model for reasoning tasks:
+You can use the engine in two ways:
+- Direct execution: `python main.py`
+- API server: `python api.py` (starts a Flask API endpoint)
 
-```python
-from engine import complete_reasoning_task
+### Tool System
 
-response, history, tools = complete_reasoning_task(
-    task="Calculate compound interest on $1000 for 5 years at 5% annual interest",
-    api_key="your-api-key",
-    model="anthropic/claude-3-opus",
-    api_url="https://openrouter.ai/api/v1/chat/completions",
-    verbose=True
-)
-```
+The engine supports two categories of tools:
 
-### Ensemble Mode
+1. **Internal Tools**
+   - Used during the reasoning process
+   - Default setup includes:
+     - Python interpreter
+     - Web search (Perplexity API)
+     - Wolfram Alpha (optional)
+   - Customizable based on your needs
 
-Leverage multiple models with a coordinator (highly experimental (as if the rest of the system wasn't unstable enough)):
+2. **Output Tools**
+   - Standard AI API output tools
+   - Called after reasoning completion
+   - Configurable based on use-case
+  
+## Learning System
 
-```python
-from mixture import ensemble
+### Memory Management
 
-ensemble_response = ensemble(
-    task=task,
-    agents=[
-        {
-            "model": "openai/gpt-4",
-            "api_key": "key1",
-            "api_url": "url1"
-        },
-        {
-            "model": "anthropic/claude-3",
-            "api_key": "key2",
-            "api_url": "url2"
-        }
-    ],
-    coordinator={
-        "model": "anthropic/claude-3-opus",
-        "api_key": "key3",
-        "api_url": "url3"
-    },
-    verbose=True
-)
-```
+A major goal of OpenReasoningEngine is to enable learning from experience. The initial implementation is simple, and will continue to be iterated on as I (and others) come up with smarter approaches.
 
-## Built-in Tools
-```
+To enable continual learning from successful executions:
 
-### Python Interpreter
+1. Obtain an API key from [Cohere](https://cohere.ai/)
 
-Execute Python code with optional state persistence:
-
-```python
-{
-    "tool": "python",
-    "parameters": {
-        "code": "x = 5",
-        "thread_id": "my_session"  # Optional: maintains state across calls
-    }
-}
-```
-
-### Web Search
-
-Search the web for information. Uses the Perplexity API — the AI *thinks* it's asking a MTurk worker because telling it this led to better results. I love my job.
-
-```python
-{
-    "tool": "web_search",
-    "parameters": {
-        "query": "What is the weather in Tokyo?"
-    }
-}
-```
-
-## Chain Management
-
-### Storing Successful Chains
-
+2. Save successful reasoning chains:
 ```python
 chain_store.save_successful_chain(
-    task="your task",
+    task=task,
     conversation_history=history,
     final_response=response,
-    cohere_api_key="your-key",
-    tools=tools
+    cohere_api_key=cohere_api_key,
+    thinking_tools=thinking_tools,
+    output_tools=output_tools,
+    metadata={"model": model, "api_url": api_url}
 )
 ```
 
-### Automatic Chain Retrieval
+The system includes starter chains in `successful_chains.json`. Community contributions to this database are welcome, subject to validation. If you have ideas to make this process more seamless and scalable, please reach out!
 
-Similar chains are automatically retrieved for new tasks:
+### Performance Notes
 
-```python
-response, history, tools = complete_reasoning_task(
-    task="your new task",
-    chain_store_api_key="your-cohere-key",
-    # ... other parameters
-)
-```
-
-## Configuration Options
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `task` | The reasoning task to complete | Required |
-| `api_key` | Provider API key | Required |
-| `model` | Model identifier | Required |
-| `api_url` | API endpoint | Required |
-| `verbose` | Show detailed progress | `False` |
-| `log_conversation` | Save conversation to file | `False` |
-| `chain_store_api_key` | Cohere API key for semantic search | Optional |
+- AIME tasks show improved performance with memory-based planning
+- HumanEval tasks perform better without memory planning
+- Performance may vary based on the specific chains in your memory store (the above cases were tested using the starter chains in `successful_chains.json`, so performance may be dramatically different with different chains)
 
 ## Logging
 
@@ -146,28 +106,12 @@ When `verbose=True`, the engine displays:
 - Tool usage and results
 - Step-by-step reasoning progress
 
-### Conversation Logging
-When `log_conversation=True`, conversations are saved to:
-```
-logs/conversation_[timestamp].json
-```
-
-## Examples
-
-See `main.py` for complete examples including:
-- Mathematical calculations
-- Python code execution
-- Ensemble reasoning
-- Chain storage and retrieval
+This makes it easy to see what's going on under the hood and diagnose issues.
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Contributions are welcome if they:
+- Demonstrably improve system capabilities
+- Include clear performance metrics
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+Quality-of-life improvements are also appreciated.
