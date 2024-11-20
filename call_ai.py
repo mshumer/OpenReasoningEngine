@@ -18,6 +18,7 @@ def send_message_to_api(
 ) -> Dict:
     """
     Send a message to the OpenRouter API and return the assistant's response.
+    Will retry up to 3 times with increasing delay between retries.
     """
     if verbose and is_first_step:
         print(f"\n{Fore.CYAN}╭──────────────────────────────────────────{Style.RESET_ALL}")
@@ -28,43 +29,56 @@ def send_message_to_api(
         print(f"{Fore.CYAN}│ Temperature: {Style.RESET_ALL}{temperature}")
         print(f"{Fore.CYAN}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
-    try:
-        print(f"\n{Fore.BLUE}Making API Request...{Style.RESET_ALL}")
-        response = requests.post(
-            api_url,
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'model': model,
-                'messages': messages,
-                'tools': tools,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'top_p': top_p,
-            },
-            timeout=60
-        )
-        print(f"{Fore.GREEN}Response received:{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}{response.json()}{Style.RESET_ALL}")
+    retries = 0
+    max_retries = 3
+    delay = 1  # Initial delay in seconds
 
-        if verbose:
-            print(f"{Fore.YELLOW}Response status: {response.status_code}{Style.RESET_ALL}")
-
-        if response.status_code != 200:
-            print(f"{Fore.RED}API Request Failed!{Style.RESET_ALL}")
-            raise Exception(
-                f"API request failed with status {response.status_code}: {response.text}"
+    while retries <= max_retries:
+        try:
+            print(f"\n{Fore.BLUE}Making API Request (Attempt {retries + 1}/{max_retries + 1})...{Style.RESET_ALL}")
+            response = requests.post(
+                api_url,
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': model,
+                    'messages': messages,
+                    'tools': tools,
+                    'max_tokens': max_tokens,
+                    'temperature': temperature,
+                    'top_p': top_p,
+                },
+                timeout=60
             )
+            print(f"{Fore.GREEN}Response received:{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}{response.json()}{Style.RESET_ALL}")
 
-        response_data = response.json()
-        print(f"{Fore.GREEN}Successfully parsed response data{Style.RESET_ALL}")
-        return response_data['choices'][0]['message']
+            if verbose:
+                print(f"{Fore.YELLOW}Response status: {response.status_code}{Style.RESET_ALL}")
 
-    except Exception as error:
-        print(f"{Fore.RED}Error occurred during API call!{Style.RESET_ALL}")
-        raise Exception(f'Error sending message to API: {str(error)}')
+            if response.status_code != 200:
+                raise Exception(
+                    f"API request failed with status {response.status_code}: {response.text}"
+                )
+
+            response_data = response.json()
+            print(f"{Fore.GREEN}Successfully parsed response data{Style.RESET_ALL}")
+            return response_data['choices'][0]['message']
+
+        except Exception as error:
+            print(f"{Fore.RED}Error occurred during API call (Attempt {retries + 1})!{Style.RESET_ALL}")
+            print(f"{Fore.RED}{str(error)}{Style.RESET_ALL}")
+            
+            if retries == max_retries:
+                raise Exception(f'Error sending message to API after {max_retries + 1} attempts: {str(error)}')
+            
+            import time
+            wait_time = delay * (2 ** retries)  # Exponential backoff
+            print(f"{Fore.YELLOW}Waiting {wait_time} seconds before retrying...{Style.RESET_ALL}")
+            time.sleep(wait_time)
+            retries += 1
 
 def generate_multiple_candidates(
     task: str,
