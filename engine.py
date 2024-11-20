@@ -11,67 +11,10 @@ from chain_store import (
     prepare_examples_messages
 )
 from planner import generate_plan  # Add this import at the top
+from call_ai import send_message_to_api, generate_best_candidate
 
 # Initialize colorama for cross-platform colored output
 init()
-
-def send_message_to_api(
-    task: str,
-    messages: List[Dict],
-    api_key: str,
-    tools: List[Dict],
-    model: str = 'gpt-4o-mini',
-    temperature: float = 0.7,
-    top_p: float = 1.0,
-    max_tokens: int = 500,
-    api_url: str = 'https://api.openai.com/v1/chat/completions',
-    verbose: bool = False,
-    is_first_step: bool = False
-) -> Dict:
-    """
-    Send a message to the OpenAI API and return the assistant's response.
-    """
-    if verbose and is_first_step:
-        print(f"\n{Fore.CYAN}╭──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│ Sending Request to API{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}├──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│ Model: {Style.RESET_ALL}{model}")
-        print(f"{Fore.CYAN}│ URL: {Style.RESET_ALL}{api_url}")
-        print(f"{Fore.CYAN}│ Temperature: {Style.RESET_ALL}{temperature}")
-        print(f"{Fore.CYAN}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
-
-    try:
-        response = requests.post(
-            api_url,
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'model': model,
-                'messages': messages,
-                'tools': tools,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'top_p': top_p,
-            },
-            timeout=60
-        )
-        print(f"Response: {response.json()}")
-
-        if verbose:
-            print(f"{Fore.YELLOW}Response status: {response.status_code}{Style.RESET_ALL}")
-
-        if response.status_code != 200:
-            raise Exception(
-                f"API request failed with status {response.status_code}: {response.text}"
-            )
-
-        response_data = response.json()
-        return response_data['choices'][0]['message']
-
-    except Exception as error:
-        raise Exception(f'Error sending message to API: {str(error)}')
 
 def thinking_loop(
     task: str,
@@ -90,7 +33,9 @@ def thinking_loop(
     image: Optional[str] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    beam_search_enabled: bool = False,
+    num_candidates: int = 1
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -305,19 +250,35 @@ def thinking_loop(
         full_conversation_history.append(user_message)
 
         # Get response from AI API
-        response = send_message_to_api(
-            task,
-            full_conversation_history,
-            api_key,
-            tools,
-            model,
-            temperature,
-            top_p,
-            max_tokens,
-            api_url,
-            verbose,
-            is_first_step=(step_count == 1)
-        )
+        if beam_search_enabled:
+            response = generate_best_candidate(
+                task,
+                full_conversation_history,
+                api_key,
+                tools,
+                num_candidates,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose,
+                is_first_step=(step_count == 1)
+            )
+        else:
+            response = send_message_to_api(
+                task,
+                full_conversation_history,
+                api_key,
+                tools,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose,
+                is_first_step=(step_count == 1)
+            )
 
         # Add assistant's response to both histories
         assistant_message = {
@@ -442,7 +403,9 @@ def complete_reasoning_task(
     output_tools: Optional[List[Dict]] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True
+    use_planning: bool = True,
+    beam_search_enabled: bool = False,
+    num_candidates: int = 1
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
@@ -575,7 +538,9 @@ def complete_reasoning_task(
         image=image,
         reflection_mode=reflection_mode,
         previous_chains=previous_chains,
-        use_planning=use_planning
+        use_planning=use_planning,
+        beam_search_enabled=beam_search_enabled,
+        num_candidates=num_candidates
     )
 
     # Only request final response if we didn't hit max steps
