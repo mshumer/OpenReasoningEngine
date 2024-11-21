@@ -126,7 +126,11 @@ chain_store.save_successful_chain(
 )
 ```
 
-The system includes starter chains in `successful_chains.json`. Community contributions to this database are welcome, subject to validation. If you have ideas to make this process more seamless and scalable, please reach out!
+The system includes starter chains in `successful_chains.json`.
+
+Community contributions to this database are welcome, subject to validation. If you'd like to add a chain to the database, please propose it [here](https://github.com/mshumer/OpenReasoningEngine/discussions/categories/proposed-chains). The community will vote on it, and if the results are positive, it will be added to the next version of the database (versioning will allow users to see stable performance over time).
+
+If you have ideas to make this process more seamless and scalable, please reach out!
 
 ### 📊 Performance Notes
 
