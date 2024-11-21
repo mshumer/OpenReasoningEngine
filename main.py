@@ -44,12 +44,14 @@ def main():
     """
 
     # Simple mode: just run one model
-    response, history, tools = complete_reasoning_task(
-        task=task,
-        api_key=OPENROUTER_API_KEY,
-        model="openai/gpt-4o-mini",
-        api_url="https://openrouter.ai/api/v1/chat/completions",
-        verbose=True,
+    object, conversation_history, thinking_tools, output_tools = (
+        complete_reasoning_task(
+            task=task,
+            api_key=OPENROUTER_API_KEY,
+            model="openai/gpt-4o-mini",
+            api_url="https://openrouter.ai/api/v1/chat/completions",
+            verbose=True,
+        )
     )
 
     # Ensemble mode: run multiple models in parallel
