@@ -1,10 +1,15 @@
 # main.py
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from engine import complete_reasoning_task
 from mixture import ensemble
 import chain_store
+import os
+
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+
 
 def main():
     # Initialize store
@@ -41,10 +46,10 @@ def main():
     # Simple mode: just run one model
     response, history, tools = complete_reasoning_task(
         task=task,
-        api_key="[REDACTED]",
+        api_key=OPENROUTER_API_KEY,
         model="openai/gpt-4o-mini",
         api_url="https://openrouter.ai/api/v1/chat/completions",
-        verbose=True
+        verbose=True,
     )
 
     # Ensemble mode: run multiple models in parallel
@@ -74,6 +79,7 @@ def main():
 
     # print("\nEnsemble Response:")
     # print(ensemble_response)
+
 
 if __name__ == "__main__":
     main()

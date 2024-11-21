@@ -5,9 +5,6 @@ import concurrent.futures
 import os
 
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-
-
 def send_message_to_api(
     task: str,
     messages: List[Dict],
@@ -52,7 +49,7 @@ def send_message_to_api(
             response = requests.post(
                 api_url,
                 headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
