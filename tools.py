@@ -19,6 +19,9 @@ from scipy import stats
 from sklearn import preprocessing
 import math
 from e2b_code_interpreter import Sandbox
+from serpapi import GoogleSearch
+
+serpapi_api_key = os.getenv("SERPAPI_API_KEY")
 
 # Dictionary of interpreter states, keyed by task hash
 interpreter_states = {}
@@ -115,60 +118,49 @@ def python_interpreter(code: str, task: str, timeout: int = 5, sandbox: Optional
 def find_datapoint_on_web(
     query: str,
     api_key: str = None,
-    api_url: str = "https://openrouter.ai/api/v1/chat/completions"
 ) -> str:
     """
-    Perform web research using Perplexity.
+    Perform web search using SERPAPI Google Search.
 
     Args:
-        query: The specific question or search query
-        api_key: API key for OpenRouter
-        api_url: API URL for OpenRouter
+        query: The specific search query
+        api_key: API key for SERPAPI
+        api_url: Not used for SERPAPI
 
     Returns:
-        str: Research findings with citations
+        str: Search results with citations
     """
     try:
-        return _ask_perplexity(query, api_key, api_url)
-    except Exception as e:
-        return f"Error performing web research: {str(e)}"
-
-def _ask_perplexity(
-    question: str,
-    api_key: str,
-    api_url: str
-) -> str:
-    """
-    Ask a question using Perplexity via OpenRouter.
-    """
-    try:
-        response = requests.post(
-            api_url,
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'model': 'perplexity/llama-3.1-sonar-large-128k-online',
-                'messages': [{'role': 'user', 'content': question}],
-                'max_tokens': 1024,
-                'temperature': 0.7
-            },
-            timeout=60
-        )
-
-        response.raise_for_status()
-        result = response.json()
-
-        if 'choices' in result:
-            return result['choices'][0]['message']['content']
-        elif 'response' in result:
-            return result['response']
+        # Configure the search
+        search = GoogleSearch({
+            "q": query,
+            "api_key": api_key,
+            "num": 5  # Get top 5 results
+        })
+        
+        # Get the results
+        results = search.get_dict()
+        
+        if "error" in results:
+            return f"Error performing search: {results['error']}"
+            
+        # Format organic results
+        formatted_results = []
+        
+        if "organic_results" in results:
+            for result in results["organic_results"]:
+                title = result.get("title", "No title")
+                snippet = result.get("snippet", "No description available")
+                link = result.get("link", "No link available")
+                formatted_results.append(f"Source: {title}\nSummary: {snippet}\nURL: {link}\n")
+                
+        if formatted_results:
+            return "\n".join(formatted_results)
         else:
-            raise ValueError(f"Unexpected API response format: {result}")
-
+            return "No relevant results found for the query."
+            
     except Exception as e:
-        raise Exception(f"Error querying Perplexity: {str(e)}")
+        return f"Error performing web search: {str(e)}"
 
 def wolfram(
     query: str,
@@ -239,7 +231,7 @@ def execute_tool(
     if tool_name == "python":
         parameters = {**parameters, "task": task, "sandbox": sandbox}
     elif tool_name == "find_datapoint_on_web":
-        parameters = {**parameters, "api_key": api_key, "api_url": api_url}
+        parameters = {**parameters, "api_key": serpapi_api_key}
     elif tool_name == "wolfram":
         parameters = {**parameters, "wolfram_app_id": wolfram_app_id}
 

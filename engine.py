@@ -81,7 +81,7 @@ def thinking_loop(
     # Create the system message for the current task
     tools_description = (
         "You have access to these tools:\n"
-        "1. find_datapoint_on_web: Search the web for information using Perplexity\n"
+        "1. find_datapoint_on_web: Search Google using SERPAPI to find factual information. Returns top search results with titles, snippets, and URLs.\n"
         "2. python: For executing Python code"
     )
 
@@ -93,6 +93,19 @@ def thinking_loop(
     if action_plan:
         plan_section = f"\n<SUGGESTED_APPROACH_BASED_ON_SIMILAR_TASKS>\n{action_plan}\n</SUGGESTED_APPROACH_BASED_ON_SIMILAR_TASKS>\n"
 
+    # Update the web search instructions in the system message
+    web_search_instructions = (
+        "\nWhen searching the web:\n"
+        "- The find_datapoint_on_web tool uses SERPAPI to search Google with enhanced results\n"
+        "- Results may include knowledge graph data, featured snippets, and detailed summaries\n"
+        "- Each result contains multiple sections including titles, snippets, and structured data\n"
+        "- Make queries specific and focused on finding factual information\n"
+        "- Use keywords rather than full questions for better search results\n"
+        "- Cross-reference information from multiple sources when possible\n"
+        "- If initial results don't contain enough detail, try searching with different keywords\n"
+        "- Always cite sources when providing information from search results\n"
+    )
+
     system_message = {
         'role': 'system',
         'content': (
@@ -103,19 +116,12 @@ def thinking_loop(
             "Each individual reasoning step should be brief.\n"
             f"{tools_description}\n\n"
             "When you need to write or test Python code, use the python tool.\n"
-            "When you need to search the web for information, use the find_datapoint_on_web tool.\n"
+            "When you need to search for information, use the find_datapoint_on_web tool.\n"
             + (
                 "When you need precise mathematical or scientific computations, use the wolfram tool.\n"
                 if wolfram_app_id else ""
             ) +
-            "\nWhen searching the web:\n"
-            "- The find_datapoint_on_web tool uses human MTurk workers who do quick research and return what they find\n"
-            "- Only ask simple, factual questions that can be directly looked up\n"
-            "- Queries must be single, straightforward questions - no compound questions\n"
-            "- Do not ask workers to make logical inferences or analyze information\n"
-            "- If a query is rejected, simplify it to ask for just one basic fact\n"
-            "- Keep queries focused on finding specific, verifiable information\n"
-            "- If the worker notes data isn't directly available or makes logic jumps, break down into simpler questions to get just the raw facts and do the analysis yourself\n"
+            f"{web_search_instructions}\n"
             "\nWhen writing Python code:\n"
             "- If your code produces an error, add print statements to debug the issue\n"
             "- Use assertions/prints to validate inputs, intermediate results, and outputs\n"
@@ -357,11 +363,12 @@ def thinking_loop(
 
                     # Add error message to conversation history so model can correct its approach
                     error_message = {
-                        'role': 'system',
+                        'role': 'tool',
                         'content': (
                             f"Error using {tool_name} tool: {error_msg}\n"
                             "Please correct your approach and try again."
-                        )
+                        ),
+                        'tool_call_id': tool_call['id']
                     }
                     conversation_history.append(error_message)
                     full_conversation_history.append(error_message)
@@ -429,7 +436,7 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Initialize E2B sandbox for Python code execution
-    timeout = 60 * 8  # 8 minutes
+    timeout = 60 * 10 # 10 minutes
     for attempt in range(3):  # Try 3 times
         try:
             sandbox = Sandbox(timeout=timeout)
