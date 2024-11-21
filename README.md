@@ -27,7 +27,7 @@ And over time, as users save successful reasoning chains, we will be able to tra
 🔹 **Step-by-Step Reasoning**  
    &nbsp;&nbsp;&nbsp;&nbsp;Executes reasoning one step per turn with integrated tools:
    - Python interpreter
-   - Web search (via Perplexity)
+   - Web search (via SerpAPI)
    -  Wolfram Alpha integration
 
 🔹 **Memory-Based Planning**  
@@ -60,12 +60,13 @@ pip install -r requirements.txt
 ```
 
 ### 2. API Setup
-Get API keys from [OpenRouter](https://openrouter.ai/) and [E2B](https://e2b.dev/)
+Get API keys from [OpenRouter](https://openrouter.ai/), [E2B](https://e2b.dev/), and [SerpAPI](https://serpapi.com/).
 
 Create a `.env` file:
 ```env
 E2B_API_KEY="your_e2b_key_here"
 OPENROUTER_API_KEY="your_openrouter_key_here"
+SERPAPI_API_KEY="your_serpapi_key_here"
 ```
 
 ### 3. Load Environment
@@ -91,7 +92,7 @@ Running the code as-is will work — I've chosen reasonable default settings. I
 - Used during the reasoning process
 - Default setup includes:
   - Python interpreter (with guidance to steer the LLM to add assertions, prints, etc. to improve performance and catch issues)
-  - Web search (Perplexity API)
+  - Web search (SerpAPI)
   - Wolfram Alpha (optional)
 - Customizable based on your needs
 
