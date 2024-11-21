@@ -20,8 +20,10 @@ from sklearn import preprocessing
 import math
 from e2b_code_interpreter import Sandbox
 from serpapi import GoogleSearch
+from dotenv import load_dotenv
+load_dotenv()
 
-serpapi_api_key = os.getenv("SERPAPI_API_KEY")
+serpapi_api_key = os.environ.get("SERPAPI_API_KEY")
 
 # Dictionary of interpreter states, keyed by task hash
 interpreter_states = {}
