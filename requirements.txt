@@ -11,6 +11,7 @@ e2b_code_interpreter==1.0.1
 exceptiongroup==1.2.2
 Flask==3.0.3
 fonttools==4.54.1
+google_search_results==2.4.2
 h11==0.14.0
 httpcore==1.0.6
 httpx==0.27.2
