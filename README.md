@@ -34,7 +34,7 @@ And over time, as users save successful reasoning chains, we will be able to tra
    &nbsp;&nbsp;&nbsp;&nbsp;Continually learns and adapts from past experiences
 
 🔹 **MoA**  
-   &nbsp;&nbsp;&nbsp;&nbsp;Implements mixture-of-agents for ensemble decision making
+   &nbsp;&nbsp;&nbsp;&nbsp;Implements mixture-of-agents for ensemble decision making — *works but requires further testing*
 
 🔹 **Beam Search**  
    &nbsp;&nbsp;&nbsp;&nbsp;Sample multiple next reasoning step candidates at each turn, and choose the best (soon to be updated with forking Python interpreters to significantly improve the system)
