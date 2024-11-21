@@ -1,24 +1,28 @@
 # main.py
 from dotenv import load_dotenv
-
-load_dotenv()
-
+import os
 from engine import complete_reasoning_task
 from mixture import ensemble
 import chain_store
-import os
+
+load_dotenv()
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
+def save_chain_prompt() -> bool:
+    """Prompt user if they want to save the chain."""
+    while True:
+        response = input("\nWould you like to save this reasoning chain for future reference? (y/n): ").lower()
+        if response in ['y', 'yes']:
+            return True
+        elif response in ['n', 'no']:
+            return False
+        print("Please answer 'y' or 'n'")
 
 def main():
     # Initialize store
     chain_store.init_store()
 
-    # API keys and configurations
-    cohere_api_key = "[REDACTED]"
-
-    # Define task
     task = """
     Create a Python implementation of a Red-Black Tree with the following operations:
     1. Insert a node
@@ -43,45 +47,42 @@ def main():
     Use the Python interpreter tool to implement and test this data structure.
     """
 
-    # Simple mode: just run one model
-    object, conversation_history, thinking_tools, output_tools = (
-        complete_reasoning_task(
-            task=task,
-            api_key=OPENROUTER_API_KEY,
-            model="openai/gpt-4o-mini",
-            api_url="https://openrouter.ai/api/v1/chat/completions",
-            verbose=True,
-        )
+    model = "openai/gpt-4o-mini"
+    api_url = "https://openrouter.ai/api/v1/chat/completions"
+    cohere_api_key = "[REDACTED]"
+
+    # Run the engine
+    response, conversation_history, thinking_tools, output_tools = complete_reasoning_task(
+        task=task,
+        api_key=OPENROUTER_API_KEY,
+        model=model,
+        api_url=api_url,
+        verbose=True,
+        use_planning=False
     )
 
-    # Ensemble mode: run multiple models in parallel
-    # ensemble_response = ensemble(
-    #     task=task,
-    #     agents=[
-    #         {
-    #             "model": "openai/gpt-4o",
-    #             "api_key": "[REDACTED]",
-    #             "api_url": "https://openrouter.ai/api/v1/chat/completions"
-    #         },
-    #         {
-    #             "model": "anthropic/claude-3.5-sonnet",
-    #             "api_key": "[REDACTED]",
-    #             "api_url": "https://openrouter.ai/api/v1/chat/completions"
-    #         }
-    #     ],
-    #     coordinator={
-    #         "model": "anthropic/claude-3.5-sonnet",
-    #         "api_key": "[REDACTED]",
-    #         "api_url": "https://openrouter.ai/api/v1/chat/completions"
-    #     },
-    #     verbose=True,
-    #     chain_store_api_key=cohere_api_key,
-    #     max_workers=3  # Optional: control parallel execution
-    # )
+    # Check if the run was successful (no errors in response)
+    if isinstance(response, dict) and not response.get('error'):
+        # Ask user if they want to save the chain
+        if save_chain_prompt():
+            try:
+                # Save the chain
+                chain_store.save_successful_chain(
+                    task=task,
+                    conversation_history=conversation_history,
+                    final_response=response,
+                    cohere_api_key=cohere_api_key,
+                    thinking_tools=thinking_tools,
+                    output_tools=output_tools,
+                    metadata={"model": model, "api_url": api_url}
+                )
+                print("Chain saved successfully!")
+            except Exception as e:
+                print(f"Error saving chain: {str(e)}")
+    else:
+        print("Run contained errors - skipping chain save prompt")
 
-    # print("\nEnsemble Response:")
-    # print(ensemble_response)
-
+    return response, conversation_history, thinking_tools, output_tools
 
 if __name__ == "__main__":
     main()

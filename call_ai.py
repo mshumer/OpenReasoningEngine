@@ -41,6 +41,16 @@ def send_message_to_api(
     max_retries = 3
     delay = 1  # Initial delay in seconds
 
+    # Prepare request data for logging
+    request_data = {
+        'model': model,
+        'messages': messages,
+        'tools': tools if tools else None,
+        'max_tokens': max_tokens,
+        'temperature': temperature,
+        'top_p': top_p,
+    }
+
     while retries <= max_retries:
         try:
             print(
@@ -52,15 +62,8 @@ def send_message_to_api(
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "tools": tools if tools else None,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                },
-                timeout=60,
+                json=request_data,
+                timeout=60
             )
             print(f"{Fore.GREEN}Response received:{Style.RESET_ALL}")
             print(f"{Fore.YELLOW}{response.json()}{Style.RESET_ALL}")
@@ -71,6 +74,28 @@ def send_message_to_api(
                 )
 
             if response.status_code != 200:
+                # Log failed request
+                import datetime
+                import os
+                import json
+                
+                os.makedirs('api_error_logs', exist_ok=True)
+                timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                log_file = f'api_error_logs/error_{timestamp}.json'
+                
+                error_log = {
+                    'timestamp': timestamp,
+                    'status_code': response.status_code,
+                    'error_message': response.text,
+                    'response_json': response.json(),
+                    'request_url': api_url,
+                    'request_data': request_data,
+                    'retry_attempt': retries + 1
+                }
+                
+                with open(log_file, 'w') as f:
+                    json.dump(error_log, f, indent=2)
+                
                 raise Exception(
                     f"API request failed with status {response.status_code}: {response.text}"
                 )
@@ -84,7 +109,29 @@ def send_message_to_api(
                 f"{Fore.RED}Error occurred during API call (Attempt {retries + 1})!{Style.RESET_ALL}"
             )
             print(f"{Fore.RED}{str(error)}{Style.RESET_ALL}")
-
+            
+            # Log any other errors that occur
+            import datetime
+            import os
+            import json
+            
+            os.makedirs('api_error_logs', exist_ok=True)
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            log_file = f'api_error_logs/error_{timestamp}.json'
+            
+            error_log = {
+                'timestamp': timestamp,
+                'error_type': type(error).__name__,
+                'error_message': str(error),
+                'request_url': api_url,
+                'response_json': response.json(),
+                'request_data': request_data,
+                'retry_attempt': retries + 1
+            }
+            
+            with open(log_file, 'w') as f:
+                json.dump(error_log, f, indent=2)
+            
             if retries == max_retries:
                 raise Exception(
                     f"Error sending message to API after {max_retries + 1} attempts: {str(error)}"
