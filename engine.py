@@ -159,6 +159,48 @@ def thinking_loop(
             ]
         })
 
+    # Add initial planning step request
+    initial_planning_message = {
+        'role': 'user',
+        'content': (
+            # 'Before we begin solving the task, let\'s create a detailed plan. Please:\n'
+            # '1. Break down the task into clear sub-goals\n'
+            # '2. Identify which tools will be needed for each sub-goal\n'
+            # '3. Outline potential challenges and how to address them\n'
+            # '4. Determine verification criteria for each sub-goal\n'
+            # '5. Most importantly, generate a suite of test cases for each sub-goal, as well as test cases for the overall task\n'
+            # "In this planning step, make it very clear that until each test case is verified, we should not proceed with the actual solution.\n"
+            # 'Provide a structured plan before we proceed with the actual solution.'
+            "Before we move on, make a list of wrong assumptions people sometimes make about the concepts included in the question."
+        )
+    }
+    conversation_history.append(initial_planning_message)
+    full_conversation_history.append(initial_planning_message)
+
+    # Get planning response
+    planning_response = send_message_to_api(
+        task,
+        full_conversation_history,
+        api_key,
+        tools,
+        model,
+        temperature,
+        top_p,
+        max_tokens,
+        api_url,
+        verbose,
+        tool_choice="none",
+    )
+
+    # Add planning response to histories
+    planning_message = {
+        'role': 'assistant',
+        'content': planning_response.get('content'),
+        'tool_calls': planning_response.get('tool_calls', None)
+    }
+    conversation_history.append(planning_message)
+    full_conversation_history.append(planning_message)
+
     while continue_loop:
         # Check if we've exceeded max steps
         if max_reasoning_steps and step_count > max_reasoning_steps:
@@ -241,14 +283,31 @@ def thinking_loop(
                 )
             } # Note — these reflection steps are often a bit long, which may lead to the non-reflection steps doing more work per step than they should. Figure this out later.
         else:
-            # Odd steps or non-reflection mode use the original message
-            user_message = {
+            if step_count == 1:
+                user_message = {
+                    'role': 'user',
+                    'content': (
+                        'Think about your first reasoning step to perform the CURRENT_TASK. '
+                        'Return just the first step. '
+                        'Remember, steps should be very brief. '
+                        'If this is the final step, return <DONE>.'
+                    )
+                }
+            else:
+                # Odd steps or non-reflection mode use the original message
+                user_message = {
                 'role': 'user',
                 'content': (
-                    'Think about your next reasoning step to perform the CURRENT_TASK. '
-                    'Return just the next step. '
-                    'Remember, steps should be very brief. '
-                    'If this is the final step, return <DONE>.'
+                    # 'Think about your next reasoning step to perform the CURRENT_TASK. '
+                    # 'Return just the next step. '
+                    # 'Remember, steps should be very brief. '
+                    # 'If this is the final step, return <DONE>.'
+                    """Think about your next reasoning step. Consider:
+1. What did you observe in the previous step's results?
+2. What needs to be validated or corrected based on those results?
+3. What's the most logical next step to make progress?
+Return a brief step focused on making concrete progress.
+If this is the final step, return <DONE>."""
                 )
             }
 
@@ -436,7 +495,7 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Initialize E2B sandbox for Python code execution
-    timeout = 60 * 10 # 10 minutes
+    timeout = 60 * 15 # 15 minutes
     for attempt in range(3):  # Try 3 times
         try:
             sandbox = Sandbox(timeout=timeout)

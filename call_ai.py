@@ -17,6 +17,7 @@ def send_message_to_api(
     api_url: str = "https://openrouter.ai/api/v1/chat/completions",
     verbose: bool = False,
     is_first_step: bool = False,
+    tool_choice: str = None,
 ) -> Dict:
     """
     Send a message to the OpenRouter API and return the assistant's response.
@@ -50,6 +51,9 @@ def send_message_to_api(
         'temperature': temperature,
         'top_p': top_p,
     }
+
+    if tool_choice:
+        request_data['tool_choice'] = tool_choice
 
     while retries <= max_retries:
         try:
