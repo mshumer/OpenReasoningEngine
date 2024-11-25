@@ -72,6 +72,7 @@ def reason():
         num_candidates = data.get('num_candidates', 1)
         beam_search_enabled = data.get('beam_search_enabled', False)
         use_planning = data.get('use_planning', False)
+        use_jeremy_planning = data.get('use_jeremy_planning', False)
 
         # Run reasoning
         response, history, thinking_tools, output_tools = complete_reasoning_task(
@@ -92,7 +93,8 @@ def reason():
             previous_chains=previous_chains,
             use_planning=use_planning,
             beam_search_enabled=beam_search_enabled,
-            num_candidates=num_candidates
+            num_candidates=num_candidates,
+            use_jeremy_planning=use_jeremy_planning
         )
                 
         return jsonify({
