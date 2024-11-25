@@ -154,7 +154,7 @@ This makes it easy to see what's going on under the hood and diagnose issues.
 
 ## 🧪 Benchmarking
 
-I've open-sourced a very simple LLM evaluation harness that you can use with this repo to test different setups and understand how well approaches work.
+I've open-sourced a very simple LLM evaluation harness that you can use with this repo to test different setups and understand how well approaches work. I've provided some example eval datasets so you can see how it works. If you want to try different OpenReasoningEngine setups, just drop in your own eval data and play with the reasoning settings until it works well for you!
 
 [Try it here.](https://github.com/mshumer/MattEval)
 
