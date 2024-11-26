@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Reasoning System</title>
+    <title>OpenReasoningEngine</title>
     <style>
         :root {
             --background: linear-gradient(135deg, #000000, #1a1a1a);
@@ -421,7 +421,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>AI Reasoning System</h1>
+        <h1>Open Reasoning Engine</h1>
         
         <div class="input-section">
             <textarea id="task-input" placeholder="Enter your task or question here..."></textarea>
@@ -437,11 +437,11 @@
 
     <script>
         const API_SETTINGS = {
-            api_key: "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",
-            model: "gpt-4-mini",
+            api_key: "KEY_GOES_HERE",
+            model: "openai/gpt-4o",
             api_url: "https://openrouter.ai/api/v1/chat/completions",
-            temperature: 0.7,
-            max_tokens: 500,
+            temperature: 0.5,
+            max_tokens: 3000,
             top_p: 1.0
         };
 
