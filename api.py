@@ -1,10 +1,14 @@
-from flask import Flask, request, jsonify, Response, stream_with_context
+from flask import Flask, request, jsonify, Response, stream_with_context, render_template
 from engine import complete_reasoning_task
 from mixture import ensemble
 import traceback
 import json
 
 app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/reason', methods=['POST'])
 def reason():

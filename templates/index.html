@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Reasoning System</title>
+    <style>
+        :root {
+            --background: #000000;
+            --card-background: rgba(22, 22, 23, 0.8);
+            --text-primary: #FFFFFF;
+            --text-secondary: #86868B;
+            --accent: #2997FF;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #2ED158;
+            --thinking: #2997FF;
+            --error: #FF453A;
+            --step-thinking-bg: rgba(41, 151, 255, 0.05);
+            --step-tool-bg: rgba(191, 90, 242, 0.05);
+            --step-final-bg: rgba(46, 209, 88, 0.05);
+            --step-error-bg: rgba(255, 69, 58, 0.05);
+            --code-bg: rgba(0, 0, 0, 0.4);
+            --code-border: rgba(255, 255, 255, 0.05);
+            --code-text: #FF9F0A;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        @font-face {
+            font-family: "SF Pro Display";
+            src: url("https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sfprodisplay-regular-webfont.woff");
+        }
+
+        @font-face {
+            font-family: "SF Pro Text";
+            src: url("https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sfprotext-regular-webfont.woff");
+        }
+
+        body {
+            background: #000000;
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 3rem 2rem;
+            font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            line-height: 1.47059;
+            letter-spacing: -0.022em;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        h1 {
+            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            font-size: 48px;
+            font-weight: 600;
+            letter-spacing: -0.003em;
+            margin-bottom: 2.5rem;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        .input-section, .output-section {
+            background: var(--card-background);
+            border-radius: 18px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 160px;
+            background: rgba(22, 22, 23, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            color: var(--text-primary);
+            padding: 1.2rem;
+            font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            font-size: 17px;
+            line-height: 1.47059;
+            letter-spacing: -0.022em;
+            margin-bottom: 1.5rem;
+            resize: vertical;
+            transition: border-color 0.2s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        button {
+            height: 44px;
+            padding: 12px 22px;
+            border-radius: 980px;
+            font-size: 17px;
+            font-weight: 400;
+            font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            letter-spacing: -0.022em;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+            border: none;
+        }
+
+        #submit-btn {
+            background: var(--accent);
+            color: var(--text-primary);
+        }
+
+        #clear-btn {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+            margin-left: 1rem;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .reasoning-step {
+            background: var(--card-background);
+            border-radius: 14px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .reasoning-step:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .reasoning-step.thinking {
+            background: var(--step-thinking-bg);
+            border-left: 3px solid var(--thinking);
+        }
+
+        .reasoning-step.tool {
+            background: var(--step-tool-bg);
+            border-left: 3px solid #BF5AF2;
+        }
+
+        .reasoning-step.final-response {
+            background: var(--step-final-bg);
+            border-left: 3px solid var(--success);
+        }
+
+        .reasoning-step.error {
+            background: var(--step-error-bg);
+            border-left: 3px solid var(--error);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 1rem;
+        }
+
+        .step-header::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .thinking .step-header::before {
+            background: var(--thinking);
+        }
+
+        .tool .step-header::before {
+            background: #BF5AF2;
+        }
+
+        .final-response .step-header::before {
+            background: var(--success);
+        }
+
+        .error .step-header::before {
+            background: var(--error);
+        }
+
+        .step-content {
+            color: var(--text-primary);
+            font-size: 17px;
+            line-height: 1.47059;
+            letter-spacing: -0.022em;
+        }
+
+        .final-response {
+            border-left: 2px solid var(--success);
+        }
+
+        .thinking {
+            border-left: 2px solid var(--thinking);
+        }
+
+        .status {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 1rem;
+        }
+
+        .tool-name {
+            color: #BF5AF2;
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+        }
+
+        .tool-name::before {
+            content: '⚡️';
+            margin-right: 8px;
+        }
+
+        .tool-args {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.8rem 0;
+            font-family: "SF Mono", ui-monospace, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--code-text);
+        }
+
+        .tool-result {
+            background: var(--step-final-bg);
+            color: var(--success);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-size: 14px;
+            border-left: 3px solid var(--success);
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 2rem 1rem;
+            }
+
+            h1 {
+                font-size: 40px;
+            }
+
+            .input-section, .output-section {
+                padding: 1.5rem;
+            }
+
+            button {
+                width: 100%;
+                margin-bottom: 1rem;
+            }
+
+            #clear-btn {
+                margin-left: 0;
+            }
+        }
+
+        /* Minimal scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Animation for thinking state */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+
+        .thinking .step-header::before {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Code block styling */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        code {
+            font-family: "SF Mono", ui-monospace, "Cascadia Code", monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--code-text);
+        }
+
+        /* Inline code styling */
+        :not(pre) > code {
+            background: var(--code-bg);
+            padding: 0.2em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .reasoning-step.completion {
+            background: var(--step-final-bg);
+            border-left: 3px solid var(--success);
+        }
+
+        .completion-message {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--success);
+            font-weight: 500;
+        }
+
+        .completion-icon {
+            background: var(--success);
+            color: black;
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Reasoning System</h1>
+        
+        <div class="input-section">
+            <textarea id="task-input" placeholder="Enter your task or question here..."></textarea>
+            <button id="submit-btn" onclick="startReasoning()">Start Reasoning</button>
+            <button id="clear-btn" onclick="clearOutput()">Clear Output</button>
+        </div>
+
+        <div class="output-section">
+            <div id="status" class="status">Ready to start reasoning...</div>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_SETTINGS = {
+            api_key: "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",
+            model: "gpt-4-mini",
+            api_url: "https://openrouter.ai/api/v1/chat/completions",
+            temperature: 0.7,
+            max_tokens: 500,
+            top_p: 1.0
+        };
+
+        let submitBtn = document.getElementById('submit-btn');
+        let taskInput = document.getElementById('task-input');
+        let output = document.getElementById('output');
+        let status = document.getElementById('status');
+        let hasDisplayedFinal = false;
+
+        function clearOutput() {
+            output.innerHTML = '';
+            status.textContent = 'Ready to start reasoning...';
+        }
+
+        function addReasoningStep(type, content) {
+            const step = document.createElement('div');
+            step.className = `reasoning-step ${type}`;
+            
+            const header = document.createElement('div');
+            header.className = 'step-header';
+            header.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+
+            const stepContent = document.createElement('div');
+            stepContent.className = 'step-content';
+            
+            if (type === 'tool') {
+                // Tool name with icon
+                const toolName = document.createElement('div');
+                toolName.className = 'tool-name';
+                toolName.textContent = content.tool_name;
+                stepContent.appendChild(toolName);
+
+                // Format arguments as code
+                if (content.arguments) {
+                    const args = document.createElement('pre');
+                    const code = document.createElement('code');
+                    code.textContent = typeof content.arguments === 'string' 
+                        ? content.arguments 
+                        : JSON.stringify(content.arguments, null, 2);
+                    args.appendChild(code);
+                    stepContent.appendChild(args);
+                }
+
+                // Tool result
+                if (content.result !== undefined) {
+                    const result = document.createElement('div');
+                    result.className = 'tool-result';
+                    result.textContent = content.result;
+                    stepContent.appendChild(result);
+                }
+            } else {
+                // Check if content contains code blocks and format them
+                const text = typeof content === 'string' ? content : 
+                    content.content || content.response || 
+                    content.thinking || JSON.stringify(content);
+                    
+                // Handle <DONE> message
+                if (text.trim() === '<DONE>') {
+                    step.className = 'reasoning-step completion';
+                    header.textContent = 'Completed';
+                    stepContent.innerHTML = `
+                        <div class="completion-message">
+                            <span class="completion-icon">✓</span>
+                            Reasoning process completed
+                        </div>
+                    `;
+                } else {
+                    // Simple code block detection and formatting
+                    const formattedContent = text.replace(/```([\s\S]*?)```/g, (match, code) => {
+                        return `<pre><code>${code.trim()}</code></pre>`;
+                    });
+                    stepContent.innerHTML = formattedContent;
+                }
+            }
+
+            step.appendChild(header);
+            step.appendChild(stepContent);
+            output.appendChild(step);
+            step.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        async function startReasoning() {
+            hasDisplayedFinal = false;
+            const task = taskInput.value.trim();
+            if (!task) {
+                status.textContent = 'Please enter a task';
+                status.style.color = '#ff453a';  // Apple's red color
+                return;
+            }
+
+            submitBtn.disabled = true;
+            status.textContent = 'Reasoning in progress...';
+            status.style.color = 'var(--text-secondary)';
+            output.innerHTML = '';
+
+            try {
+                const response = await fetch('/reason_stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': window.location.href,
+                        'Authorization': `Bearer ${API_SETTINGS.api_key}`
+                    },
+                    body: JSON.stringify({
+                        task: task,
+                        ...API_SETTINGS
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.type === 'final') {
+                                    if (!hasDisplayedFinal) {
+                                        let finalResponse;
+                                        if (data.content && data.content.response) {
+                                            const firstResponse = data.content.response[0];
+                                            if (firstResponse && firstResponse.content) {
+                                                finalResponse = firstResponse.content;
+                                            }
+                                        }
+                                        
+                                        if (!finalResponse) {
+                                            finalResponse = 'No valid response found';
+                                        }
+                                        
+                                        addReasoningStep('final', finalResponse);
+                                        status.textContent = 'Reasoning complete!';
+                                        status.style.color = 'var(--success)';
+                                        hasDisplayedFinal = true;
+                                    }
+                                } else if (data.type === 'tool') {
+                                    addReasoningStep('tool', data.content);
+                                } else {
+                                    addReasoningStep(data.type, data.content);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+                status.style.color = '#ff453a';
+                addReasoningStep('error', 'An error occurred during reasoning.');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // Allow submission with Cmd/Ctrl + Enter
+        taskInput.addEventListener('keydown', (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                startReasoning();
+            }
+        });
+    </script>
+</body>
+</html> 
