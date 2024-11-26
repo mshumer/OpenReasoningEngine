@@ -84,7 +84,7 @@ Two options available:
 - API server: `python api.py` (starts a Flask API endpoint)
 
 ## Config Options
-Running the code as-is will work — I've chosen reasonable default settings. If you'd like to customize the way the system reasons, here are all of the settings you can configure: [LINK HERE!]
+Running the code as-is will work — I've chosen reasonable default settings. If you'd like to customize the way the system reasons, you can adjust the parameters when you run it.
 
 ### Tool System
 
@@ -134,9 +134,7 @@ If you have ideas to make this process more seamless and scalable, please reach 
 
 ### 📊 Performance Notes
 
-- AIME tasks show improved performance with memory-based planning
-- HumanEval tasks perform better without memory planning
-- Performance may vary based on the specific chains in your memory store (the above cases were tested using the starter chains in `successful_chains.json`, so performance may be dramatically different with different chains)
+- Performance may vary based on the specific chains in your memory store (performance may be dramatically different with different chains)
 
 ---
 
