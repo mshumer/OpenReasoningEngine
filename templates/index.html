@@ -6,22 +6,23 @@
     <title>AI Reasoning System</title>
     <style>
         :root {
-            --background: #000000;
-            --card-background: rgba(22, 22, 23, 0.8);
+            --background: linear-gradient(135deg, #000000, #1a1a1a);
+            --card-background: rgba(18, 18, 20, 0.95);
             --text-primary: #FFFFFF;
-            --text-secondary: #86868B;
-            --accent: #2997FF;
-            --border: rgba(255, 255, 255, 0.1);
-            --success: #2ED158;
-            --thinking: #2997FF;
-            --error: #FF453A;
-            --step-thinking-bg: rgba(41, 151, 255, 0.05);
-            --step-tool-bg: rgba(191, 90, 242, 0.05);
-            --step-final-bg: rgba(46, 209, 88, 0.05);
-            --step-error-bg: rgba(255, 69, 58, 0.05);
-            --code-bg: rgba(0, 0, 0, 0.4);
-            --code-border: rgba(255, 255, 255, 0.05);
-            --code-text: #FF9F0A;
+            --text-secondary: #9EA3B5;
+            --accent: #FF8800;
+            --accent-gradient: linear-gradient(135deg, #FF8800, #FF5500);
+            --border: rgba(255, 255, 255, 0.08);
+            --success: #00FF88;
+            --thinking: #FF8800;
+            --error: #FF2D55;
+            --step-thinking-bg: rgba(255, 136, 0, 0.05);
+            --step-tool-bg: rgba(255, 136, 0, 0.05);
+            --step-final-bg: rgba(0, 255, 136, 0.05);
+            --step-error-bg: rgba(255, 45, 85, 0.05);
+            --code-bg: rgba(0, 0, 0, 0.6);
+            --code-border: rgba(255, 255, 255, 0.08);
+            --code-text: #FF8800;
         }
 
         * {
@@ -43,7 +44,7 @@
         }
 
         body {
-            background: #000000;
+            background: var(--background);
             color: var(--text-primary);
             min-height: 100vh;
             padding: 3rem 2rem;
@@ -53,98 +54,142 @@
         }
 
         .container {
-            max-width: 980px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 0 1rem;
         }
 
         h1 {
             font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-            font-size: 48px;
-            font-weight: 600;
+            font-size: 56px;
+            font-weight: 700;
             letter-spacing: -0.003em;
             margin-bottom: 2.5rem;
             color: var(--text-primary);
             text-align: center;
+            text-transform: uppercase;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(255, 136, 0, 0.3);
         }
 
         .input-section, .output-section {
             background: var(--card-background);
-            border-radius: 18px;
-            padding: 2rem;
+            border-radius: 24px;
+            padding: 2.5rem;
             margin-bottom: 2rem;
             border: 1px solid var(--border);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .input-section::before, .output-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 136, 0, 0.3), 
+                transparent
+            );
         }
 
         textarea {
             width: 100%;
             min-height: 160px;
-            background: rgba(22, 22, 23, 0.8);
+            background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border);
-            border-radius: 14px;
+            border-radius: 16px;
             color: var(--text-primary);
-            padding: 1.2rem;
+            padding: 1.5rem;
             font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
             font-size: 17px;
             line-height: 1.47059;
             letter-spacing: -0.022em;
             margin-bottom: 1.5rem;
             resize: vertical;
-            transition: border-color 0.2s ease;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         textarea:focus {
             outline: none;
             border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(255, 136, 0, 0.2);
         }
 
         button {
-            height: 44px;
-            padding: 12px 22px;
-            border-radius: 980px;
+            height: 48px;
+            padding: 0 28px;
+            border-radius: 24px;
             font-size: 17px;
-            font-weight: 400;
+            font-weight: 600;
             font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
             letter-spacing: -0.022em;
             cursor: pointer;
-            transition: opacity 0.2s ease;
+            transition: all 0.3s ease;
             border: none;
+            text-transform: uppercase;
         }
 
         #submit-btn {
-            background: var(--accent);
+            background: var(--accent-gradient);
             color: var(--text-primary);
+            box-shadow: 0 4px 12px rgba(255, 136, 0, 0.3);
         }
 
         #clear-btn {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(255, 255, 255, 0.05);
             color: var(--text-primary);
             margin-left: 1rem;
+            border: 1px solid var(--border);
         }
 
         button:hover {
-            opacity: 0.8;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(255, 136, 0, 0.4);
         }
 
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        #clear-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
         }
 
         .reasoning-step {
             background: var(--card-background);
-            border-radius: 14px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
+            border-radius: 16px;
+            padding: 1.8rem;
+            margin-bottom: 1.5rem;
             border: 1px solid var(--border);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .reasoning-step::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.03) 0%, 
+                rgba(255, 255, 255, 0) 100%
+            );
+            pointer-events: none;
         }
 
         .reasoning-step:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transform: translateY(-2px) scale(1.01);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
         }
 
         .reasoning-step.thinking {
@@ -170,21 +215,22 @@
         .step-header {
             display: flex;
             align-items: center;
-            color: var(--text-secondary);
-            font-size: 13px;
-            font-weight: 500;
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 1rem;
+            letter-spacing: 0.1em;
+            margin-bottom: 1.2rem;
         }
 
         .step-header::before {
             content: '';
             display: inline-block;
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            margin-right: 8px;
+            margin-right: 10px;
+            box-shadow: 0 0 10px currentColor;
         }
 
         .thinking .step-header::before {
@@ -225,7 +271,7 @@
         }
 
         .tool-name {
-            color: #BF5AF2;
+            color: var(--accent);
             font-size: 15px;
             font-weight: 500;
             margin-bottom: 0.8rem;
@@ -362,6 +408,14 @@
             align-items: center;
             justify-content: center;
             font-size: 14px;
+        }
+
+        /* Add back disabled button state */
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
     </style>
 </head>
