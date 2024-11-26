@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from engine import complete_reasoning_task
 from mixture import ensemble
 import traceback
+import json
 
 app = Flask(__name__)
 
@@ -109,7 +110,95 @@ def reason():
             'error': str(e),
             'traceback': traceback.format_exc()
         }), 500
+    
+@app.route('/reason_stream', methods=['POST'])
+def reason_stream():
+    try:
+        data = request.get_json()
+        
+        # Required parameters
+        task = data.get('task')
+        api_key = data.get('api_key')
+        model = data.get('model')
+        api_url = data.get('api_url')
+    
+        if not all([task, api_key, model, api_url]):
+            return jsonify({
+                'error': 'Missing required parameters. Need: task, api_key, model, api_url'
+            }), 400
+                
+        # Optional parameters
+        temperature = data.get('temperature', 0.7)
+        top_p = data.get('top_p', 1.0)
+        max_tokens = data.get('max_tokens', 500)
+        verbose = data.get('verbose', False)
+        chain_store_api_key = data.get('chain_store_api_key')
+        wolfram_app_id = data.get('wolfram_app_id')
+        max_reasoning_steps = data.get('max_reasoning_steps')
+        image = data.get('image')
+        output_tools = data.get('output_tools')
+        reflection_mode = data.get('reflection_mode', False)
+        previous_chains = data.get('previous_chains', [])
+        num_candidates = data.get('num_candidates', 1)
+        beam_search_enabled = data.get('beam_search_enabled', False)
+        use_planning = data.get('use_planning', False)
+        use_jeremy_planning = data.get('use_jeremy_planning', False)
+        
+        def generate():
+            def stream_callback(step_type: str, content: dict):
+                data = json.dumps({'type': step_type, 'content': content})
+                return f"data: {data}\n\n"
 
+            # Start the reasoning process
+            result_generator = complete_reasoning_task(
+                task=task,
+                api_key=api_key,
+                model=model,
+                api_url=api_url,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                verbose=verbose,
+                chain_store_api_key=chain_store_api_key,
+                wolfram_app_id=wolfram_app_id,
+                max_reasoning_steps=max_reasoning_steps,
+                image=image,
+                reflection_mode=reflection_mode,
+                previous_chains=previous_chains,
+                use_planning=use_planning,
+                beam_search_enabled=beam_search_enabled,
+                num_candidates=num_candidates,
+                use_jeremy_planning=use_jeremy_planning,
+                stream_thoughts=True,
+                stream_callback=stream_callback
+            )
+
+            # Handle the stream
+            for step in result_generator:
+                if len(step) == 2:  # Intermediate step (type, content)
+                    step_type, content = step
+                    yield stream_callback(step_type, content)
+                else:  # Final response tuple
+                    response, history, thinking_tools, output_tools = step
+                    final_data = {
+                        'type': 'final',
+                        'content': {
+                            'response': response,
+                            'reasoning_chain': history,
+                            'thinking_tools': thinking_tools,
+                            'output_tools': output_tools
+                        }
+                    }
+                    yield f"data: {json.dumps(final_data)}\n\n"            
+
+        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+    
 @app.route('/ensemble', methods=['POST'])
 def run_ensemble():
     """

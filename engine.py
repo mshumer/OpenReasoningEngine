@@ -1,7 +1,7 @@
 import os
 import requests
 from e2b_code_interpreter import Sandbox
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional, Tuple, Union, Callable, Generator
 from colorama import init, Fore, Style
 from tools import execute_tool, clear_interpreter_state
 import json
@@ -37,11 +37,12 @@ def thinking_loop(
     use_planning: bool = True,
     beam_search_enabled: bool = False,
     num_candidates: int = 1,
-    use_jeremy_planning: bool = False
-) -> List[Dict]:
+    use_jeremy_planning: bool = False,
+    stream_thoughts: bool = False,
+    stream_callback: Optional[Callable] = None,
+) -> Union[List[Dict], Generator[Tuple[str, Dict], None, List[Dict]]]:
     """
-    Execute the thinking loop and return the conversation history.
-    Uses planning from memory to guide reasoning.
+    Modified to either return conversation history or yield intermediate steps.
     """
     conversation_history = []
     continue_loop = True
@@ -203,6 +204,12 @@ def thinking_loop(
         conversation_history.append(planning_message)
         full_conversation_history.append(planning_message)
 
+        if stream_thoughts and stream_callback:
+            stream_callback('planning', {
+                'content': planning_response.get('content'),
+                'tool_calls': planning_response.get('tool_calls', None)
+            })
+
     while continue_loop:
         # Check if we've exceeded max steps
         if max_reasoning_steps and step_count > max_reasoning_steps:
@@ -356,6 +363,12 @@ def thinking_loop(
         conversation_history.append(assistant_message)
         full_conversation_history.append(assistant_message)
 
+        if stream_thoughts and stream_callback:
+            stream_callback('assistant', {
+                'content': response.get('content'),
+                'tool_calls': response.get('tool_calls', None)
+            })
+
         if verbose and response.get('content'):
             print(f"\n{Fore.GREEN}Assistant: {Style.RESET_ALL}{response['content']}")
 
@@ -416,6 +429,13 @@ def thinking_loop(
                         print(f"{Fore.YELLOW}│ Result: {Style.RESET_ALL}{result}")
                         print(f"{Fore.YELLOW}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
+                    if stream_thoughts and stream_callback:
+                        stream_callback('tool', {
+                            'tool_name': tool_name,
+                            'arguments': arguments,
+                            'result': str(result)
+                        })
+
                 except Exception as e:
                     error_msg = str(e)
                     if verbose:
@@ -452,7 +472,24 @@ def thinking_loop(
 
         step_count += 1
 
-    return full_conversation_history
+        # Stream intermediate results if enabled
+        if stream_thoughts:
+            if response.get('content'):
+                yield 'assistant', {
+                    'content': response.get('content'),
+                    'tool_calls': response.get('tool_calls', None)
+                }
+
+            if 'tool_calls' in response and response['tool_calls']:
+                for tool_call in response['tool_calls']:
+                    # ... existing tool execution code ...
+                    yield 'tool', {
+                        'tool_name': tool_name,
+                        'arguments': arguments,
+                        'result': str(result)
+                    }
+
+    return conversation_history
 
 def complete_reasoning_task(
     task: str,
@@ -474,12 +511,13 @@ def complete_reasoning_task(
     use_planning: bool = True,
     beam_search_enabled: bool = False,
     num_candidates: int = 1,
-    use_jeremy_planning: bool = False
-) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
+    use_jeremy_planning: bool = False,
+    stream_thoughts: bool = False,
+    stream_callback: Optional[Callable] = None,
+) -> Union[Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]], Generator]:
     """
-    Execute the reasoning task and return the final response.
-    Now supports optional structured output via output_tools, reflection mode,
-    and previous conversation chains.
+    Execute the reasoning task and either return the final response or yield intermediate steps.
+    When stream_thoughts is True, yields intermediate steps and finally returns the complete result.
     """
     # Clear Python interpreter state for just this task
     clear_interpreter_state(task=task)
@@ -596,30 +634,235 @@ def complete_reasoning_task(
         for chain in previous_chains:
             conversation_history.extend(chain)
 
-    # Run thinking loop with thinking tools
-    conversation_history = thinking_loop(
-        task,
-        api_key,
-        thinking_tools,
-        model,
-        temperature,
-        top_p,
-        max_tokens,
-        api_url,
-        verbose,
-        chain_store_api_key=chain_store_api_key,
-        wolfram_app_id=wolfram_app_id,
-        max_reasoning_steps=max_reasoning_steps,
-        sandbox=sandbox,
-        image=image,
-        reflection_mode=reflection_mode,
-        previous_chains=previous_chains,
-        use_planning=use_planning,
-        beam_search_enabled=beam_search_enabled,
-        num_candidates=num_candidates,
-        use_jeremy_planning=use_jeremy_planning
-    )
+    def stream_thinking_loop(
+        task: str,
+        api_key: str,
+        tools: List[Dict],
+        model: str = 'gpt-4o-mini',
+        temperature: float = 0.7,
+        top_p: float = 1.0,
+        max_tokens: int = 500,
+        api_url: str = 'https://api.openai.com/v1/chat/completions',
+        verbose: bool = False,
+        chain_store_api_key: Optional[str] = None,
+        wolfram_app_id: Optional[str] = None,
+        max_reasoning_steps: Optional[int] = None,
+        sandbox: Optional[Sandbox] = None,
+        image: Optional[str] = None,
+        reflection_mode: bool = False,
+        previous_chains: Optional[List[List[Dict]]] = None,
+        use_planning: bool = True,
+        beam_search_enabled: bool = False,
+        num_candidates: int = 1,
+        use_jeremy_planning: bool = False,
+        stream_thoughts: bool = False,
+        stream_callback: Optional[Callable] = None,
+    ) -> Generator:
+        """Generator version of thinking loop that yields intermediate steps."""
+        
+        conversation_history = []
+        continue_loop = True
+        step_count = 1
 
+        # Initialize conversation with system message
+        system_message = {
+            'role': 'system',
+            'content': (
+                f"<CURRENT_TASK>\n{task}\n</CURRENT_TASK>\n"
+                "Think step by step. Each step should be brief and focused.\n"
+                "When you need to write code, use the python tool.\n"
+                "When you need to search for information, use the find_datapoint_on_web tool.\n"
+                "Return <DONE> after the last step."
+            )
+        }
+        conversation_history.append(system_message)
+
+        # Add previous chains if provided
+        if previous_chains:
+            for chain in previous_chains:
+                conversation_history.extend(chain)
+
+        while continue_loop:
+            # Create user message for next step
+            user_message = {
+                'role': 'user',
+                'content': (
+                    'Think about your next reasoning step. '
+                    'Return just the next step. '
+                    'If this is the final step, return <DONE>.'
+                )
+            }
+            conversation_history.append(user_message)
+
+            # Get response from AI
+            response = send_message_to_api(
+                task,
+                conversation_history,
+                api_key,
+                tools,
+                model,
+                temperature,
+                top_p,
+                max_tokens,
+                api_url,
+                verbose
+            )
+
+            # Add assistant's response to history
+            assistant_message = {
+                'role': 'assistant',
+                'content': response.get('content'),
+                'tool_calls': response.get('tool_calls', None)
+            }
+            conversation_history.append(assistant_message)
+
+            # Yield intermediate step
+            yield 'assistant', {
+                'content': response.get('content'),
+                'tool_calls': response.get('tool_calls', None)
+            }
+
+            # Handle tool calls if present
+            if 'tool_calls' in response and response['tool_calls']:
+                for tool_call in response['tool_calls']:
+                    try:
+                        result = execute_tool(
+                            tool_call['function']['name'],
+                            json.loads(tool_call['function']['arguments']),
+                            task=task,
+                            api_key=api_key,
+                            model=model,
+                            api_url=api_url,
+                            wolfram_app_id=wolfram_app_id,
+                            sandbox=sandbox,
+                        )
+
+                        # Add tool result to history
+                        tool_message = {
+                            'role': 'tool',
+                            'tool_call_id': tool_call['id'],
+                            'content': str(result)
+                        }
+                        conversation_history.append(tool_message)
+
+                        # Yield tool result
+                        yield 'tool', {
+                            'tool_name': tool_call['function']['name'],
+                            'arguments': json.loads(tool_call['function']['arguments']),
+                            'result': str(result)
+                        }
+
+                    except Exception as e:
+                        error_msg = str(e)
+                        conversation_history.append({
+                            'role': 'tool',
+                            'content': f"Error: {error_msg}",
+                            'tool_call_id': tool_call['id']
+                        })
+
+            # Check for completion
+            if response.get('content') and '<done>' in response['content'].lower():
+                continue_loop = False
+
+            step_count += 1
+            if max_reasoning_steps and step_count > max_reasoning_steps:
+                continue_loop = False
+
+        # Get final response
+        final_response = get_final_response(
+            task=task,
+            conversation_history=conversation_history,
+            api_key=api_key,
+            model=model,
+            api_url=api_url,
+            thinking_tools=thinking_tools,
+            output_tools=output_tools,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            verbose=verbose
+        )
+
+        # Return the final tuple
+        yield (final_response, conversation_history, thinking_tools, output_tools)
+
+        # After thinking loop completes, get final response
+        final_response = get_final_response(
+            task=task,
+            conversation_history=conversation_history,
+            thinking_tools=thinking_tools,
+            output_tools=output_tools,
+            max_reasoning_steps=max_reasoning_steps,
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            api_url=api_url,
+            api_key=api_key,
+        )
+        
+        # Yield the final result tuple
+        yield (final_response, conversation_history, thinking_tools, output_tools)
+
+    if stream_thoughts:
+        return stream_thinking_loop(
+            task=task,
+            api_key=api_key,
+            tools=thinking_tools,
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            api_url=api_url,
+            verbose=verbose,
+            chain_store_api_key=chain_store_api_key,
+            wolfram_app_id=wolfram_app_id,
+            max_reasoning_steps=max_reasoning_steps,
+            sandbox=sandbox,
+            image=image,
+            reflection_mode=reflection_mode,
+            previous_chains=previous_chains,
+            use_planning=use_planning,
+            beam_search_enabled=beam_search_enabled,
+            num_candidates=num_candidates,
+            use_jeremy_planning=use_jeremy_planning,
+            stream_thoughts=stream_thoughts,
+            stream_callback=stream_callback
+        )
+    else:
+        # Original non-streaming behavior
+        conversation_history = thinking_loop(...)  # Original call
+        final_response = get_final_response(
+            task=task,
+            conversation_history=conversation_history,
+            thinking_tools=thinking_tools,
+            output_tools=output_tools,
+            max_reasoning_steps=max_reasoning_steps,
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            api_url=api_url,
+            api_key=api_key,
+        )
+        return final_response, conversation_history, thinking_tools, output_tools
+
+def get_final_response(
+    task: str,
+    conversation_history: List[Dict],
+    thinking_tools: List[Dict],
+    output_tools: Optional[List[Dict]] = None,
+    max_reasoning_steps: Optional[int] = None,
+    model: str = 'gpt-4o-mini',
+    temperature: float = 0.7,
+    tools: List[Dict] = None,
+    top_p: float = 1.0,
+    max_tokens: int = 3000,
+    api_url: str = 'https://openrouter.ai/api/v1/chat/completions',
+    api_key: str = None,
+    log_conversation: bool = False,
+    verbose: bool = False,
+) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     # Only request final response if we didn't hit max steps
     final_response = None
     if not max_reasoning_steps or len([m for m in conversation_history if m['role'] == 'system' and 'Maximum reasoning steps' in m.get('content', '')]) == 0:
@@ -641,12 +884,13 @@ def complete_reasoning_task(
         # Get final response with output tools if provided
 
         # Wrapping in try/except to catch any errors and try again with validated conversation history — for now... just because I'm not 100% sure if the validation is working and I don't want to risk messing up already solid chains
+        print(f"Final conversation history: {conversation_history}")
         try:
             final_response = send_message_to_api(
                 task,
                 conversation_history,
                 api_key,
-                output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
+                tools,
                 model,
                 temperature,
                 top_p,
@@ -661,7 +905,7 @@ def complete_reasoning_task(
                 task,
                 validate_conversation(conversation_history),
                 api_key,
-                output_tools if output_tools else thinking_tools,
+                tools,
                 model,
                 temperature,
                 top_p,
