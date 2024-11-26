@@ -177,3 +177,5 @@ Thank you to the following folks who provided advice, feedback, ideas, and helpe
 - [Alec Velikanov](https://x.com/alecvxyz) (Alex, imo)
 
 [Follow me on X](https://x.com/mattshumer_) for updates on this and other AI things I'm working on.
+
+OpenReasoningEngine is released under the MIT License. See the [LICENSE](https://github.com/mshumer/OpenReasoningEngine/blob/main/LICENSE) file for more details.
