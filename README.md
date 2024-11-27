@@ -28,7 +28,8 @@ And over time, as users save successful reasoning chains, we will be able to tra
    &nbsp;&nbsp;&nbsp;&nbsp;Executes reasoning one step per turn with integrated tools:
    - Python interpreter
    - Web search (via SerpAPI)
-   -  Wolfram Alpha integration
+   - Wolfram Alpha integration
+   - Full webpage reading (via Jina)
 
 🔹 **Memory-Based Planning**  
    &nbsp;&nbsp;&nbsp;&nbsp;Continually learns and adapts from past experiences
@@ -60,13 +61,20 @@ pip install -r requirements.txt
 ```
 
 ### 2. API Setup
-Get API keys from [OpenRouter](https://openrouter.ai/), [E2B](https://e2b.dev/), and [SerpAPI](https://serpapi.com/).
+Get API keys from:
+- [OpenRouter](https://openrouter.ai/) - for model access
+- [E2B](https://e2b.dev/) - for Python code execution
+- [SerpAPI](https://serpapi.com/) - for web search
+- [Jina](https://jina.ai/) (optional) - for webpage content extraction
+- [Wolfram Alpha](https://products.wolframalpha.com/api) (optional) - for computations/scientific queries
 
 Create a `.env` file:
 ```env
 E2B_API_KEY="your_e2b_key_here"
 OPENROUTER_API_KEY="your_openrouter_key_here"
 SERPAPI_API_KEY="your_serpapi_key_here"
+JINA_API_KEY="your_jina_key_here"  # Optional
+WOLFRAM_APP_ID="your_wolfram_key_here"  # Optional
 ```
 
 ### 3. Load Environment
@@ -93,6 +101,7 @@ Running the code as-is will work — I've chosen reasonable default settings. I
 - Default setup includes:
   - Python interpreter (with guidance to steer the LLM to add assertions, prints, etc. to improve performance and catch issues)
   - Web search (SerpAPI)
+  - Webpage content extraction (Jina, optional)
   - Wolfram Alpha (optional)
 - Customizable based on your needs
 
