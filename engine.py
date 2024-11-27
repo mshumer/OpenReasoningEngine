@@ -503,7 +503,7 @@ def complete_reasoning_task(
         print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
     # Initialize E2B sandbox for Python code execution
-    timeout = 60 * 10 # 10 minutes
+    timeout = 60 * 15 # 10 minutes
     for attempt in range(3):  # Try 3 times
         try:
             sandbox = Sandbox(timeout=timeout)
@@ -527,11 +527,6 @@ def complete_reasoning_task(
                             "type": "string",
                             "description": "The Python code to execute"
                         },
-                        "timeout": {
-                            "type": "integer",
-                            "description": "Maximum execution time in seconds",
-                            "default": 5
-                        }
                     },
                     "required": ["code"]
                 }

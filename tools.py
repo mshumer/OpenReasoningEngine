@@ -48,7 +48,7 @@ def clear_interpreter_state(task: str = None):
     else:
         interpreter_states = {}
 
-def python_interpreter(code: str, task: str, timeout: int = 5, sandbox: Optional[Sandbox] = None) -> str:
+def python_interpreter(code: str, task: str, timeout: int = 10, sandbox: Optional[Sandbox] = None) -> str:
     """
     Safely execute Python code in a restricted environment.
     Maintains separate state for each task.
