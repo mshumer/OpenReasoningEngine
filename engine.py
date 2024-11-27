@@ -81,15 +81,17 @@ def thinking_loop(
             conversation_history.extend(chain)
 
     # Create the system message for the current task
-    tools_description = (
-        "You have access to these tools:\n"
-        "1. find_datapoint_on_web: Search Google using SERPAPI to find factual information. Returns top search results with titles, snippets, and URLs.\n"
-        "2. python: For executing Python code\n"
-        "3. get_webpage_content: Retrieve detailed content from specific webpages using Jina API. Use this when you want to read the full content of a webpage."
-    )
-
+    tool_list = []
+    tool_list.append("find_datapoint_on_web: Search Google using SERPAPI to find factual information. Returns top search results with titles, snippets, and URLs.")
+    tool_list.append("python: For executing Python code")
+    
     if wolfram_app_id:
-        tools_description += "\n4. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
+        tools.append("wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations")
+        
+    if jina_api_key:
+        tools.append("get_webpage_content: Retrieve detailed content from specific webpages using Jina API. Use this when you want to read the full content of a webpage")
+        
+    tools_description = "You have access to these tools:\n" + "\n".join(f"{i+1}. {tool}" for i, tool in enumerate(tools))
 
     # Include the generated plan in the system message
     plan_section = ""
@@ -551,27 +553,10 @@ def complete_reasoning_task(
                     "required": ["query"]
                 }
             }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_webpage_content",
-                "description": "Retrieve the content of a webpage using Jina API. Useful for reading detailed content from search results or specific URLs.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "The URL of the webpage to fetch content from"
-                        }
-                    },
-                    "required": ["url"]
-                }
-            }
         }
     ]
 
-    # Add Wolfram tool only if wolfram_app_id is provided
+    # Add Wolfram tool if wolfram_app_id is provided
     if wolfram_app_id:
         thinking_tools.append({
             "type": "function",
@@ -600,6 +585,26 @@ def complete_reasoning_task(
                         }
                     },
                     "required": ["query"]
+                }
+            }
+        })
+
+    # Add Jina tool if jina_api_key is provided
+    if jina_api_key:
+        thinking_tools.append({
+            "type": "function",
+            "function": {
+                "name": "get_webpage_content",
+                "description": "Retrieve the content of a webpage using Jina API. Useful for reading detailed content from search results or specific URLs.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "The URL of the webpage to fetch content from"
+                        }
+                    },
+                    "required": ["url"]
                 }
             }
         })

@@ -246,15 +246,16 @@ def execute_tool(
     sandbox: Optional[Sandbox] = None,
     jina_api_key: str = None
 ) -> Any:
-    """
-    Execute the specified tool with the given parameters.
-    """
+    """Execute the specified tool with the given parameters."""
     tools = {
         "python": python_interpreter,
         "find_datapoint_on_web": find_datapoint_on_web,
         "wolfram": wolfram,
-        "get_webpage_content": get_webpage_content
     }
+    
+    # Only add get_webpage_content tool if Jina API key is provided
+    if jina_api_key:
+        tools["get_webpage_content"] = get_webpage_content
 
     if tool_name not in tools:
         raise ValueError(f"Unknown tool: {tool_name}")
