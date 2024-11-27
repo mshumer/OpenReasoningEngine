@@ -40,7 +40,8 @@ def reason():
                     "tool_calls": [] # optional
                 }
             ]
-        ]
+        ],
+        "jina_api_key": "jina-api-key"  # optional
     }
     """
     try:
@@ -73,6 +74,7 @@ def reason():
         beam_search_enabled = data.get('beam_search_enabled', False)
         use_planning = data.get('use_planning', False)
         use_jeremy_planning = data.get('use_jeremy_planning', False)
+        jina_api_key = data.get('jina_api_key')
 
         # Run reasoning
         response, history, thinking_tools, output_tools = complete_reasoning_task(
@@ -94,7 +96,8 @@ def reason():
             use_planning=use_planning,
             beam_search_enabled=beam_search_enabled,
             num_candidates=num_candidates,
-            use_jeremy_planning=use_jeremy_planning
+            use_jeremy_planning=use_jeremy_planning,
+            jina_api_key=jina_api_key
         )
                 
         return jsonify({
