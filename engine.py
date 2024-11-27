@@ -487,285 +487,292 @@ def complete_reasoning_task(
     Now supports optional structured output via output_tools, reflection mode,
     and previous conversation chains.
     """
-    # Clear Python interpreter state for just this task
-    clear_interpreter_state(task=task)
+    sandbox = None
+    try:
+        # Clear Python interpreter state for just this task
+        clear_interpreter_state(task=task)
 
-    if api_key is None:
-        raise ValueError('API key not provided.')
-
-    if verbose:
-        print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}│ Starting Task{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}├──────────────────────────────────────────{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}│ {task}{Style.RESET_ALL}")
-        if previous_chains:
-            print(f"{Fore.MAGENTA}│ With {len(previous_chains)} previous conversation chains{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
-
-    # Initialize E2B sandbox for Python code execution
-    timeout = 60 * 15 # 10 minutes
-    for attempt in range(3):  # Try 3 times
-        try:
-            sandbox = Sandbox(timeout=timeout)
-            break  # If successful, exit the loop
-        except Exception as e:
-            if attempt == 2:  # If this was the last attempt
-                raise Exception(f"Failed to create sandbox after 3 attempts. Last error: {e}")
-            continue
-
-    # Define thinking tools (internal tools that can be used during reasoning)
-    thinking_tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "python",
-                "description": "Execute Python code and return the output.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "code": {
-                            "type": "string",
-                            "description": "The Python code to execute"
-                        },
-                    },
-                    "required": ["code"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "find_datapoint_on_web",
-                "description": "Search the web for a datapoint using Perplexity. Returns findings with citations.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The specific question"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        }
-    ]
-
-    # Add Wolfram tool if wolfram_app_id is provided
-    if wolfram_app_id:
-        thinking_tools.append({
-            "type": "function",
-            "function": {
-                "name": "wolfram",
-                "description": "Query Wolfram Alpha for computations, math, science, and knowledge. Great for mathematical analysis, scientific calculations, data analysis, and fact-checking.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The query to send to Wolfram Alpha. Be specific and precise."
-                        },
-                        "include_pods": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            },
-                            "description": "Optional list of pod names to include (e.g., ['Result', 'Solution', 'Plot']). Leave empty for all pods.",
-                            "default": None
-                        },
-                        "max_width": {
-                            "type": "integer",
-                            "description": "Maximum width for plots/images",
-                            "default": 1000
-                        }
-                    },
-                    "required": ["query"]
-                }
-            }
-        })
-
-    # Add Jina tool if jina_api_key is provided
-    if jina_api_key:
-        thinking_tools.append({
-            "type": "function",
-            "function": {
-                "name": "get_webpage_content",
-                "description": "Retrieve the content of a webpage using Jina API. Useful for reading detailed content from search results or specific URLs.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "The URL of the webpage to fetch content from"
-                        }
-                    },
-                    "required": ["url"]
-                }
-            }
-        })
-
-    # Add output tools description
-    output_tools_description = ""
-    if output_tools:
-        output_tools_description = "\n\nWhen providing your final response, you can use these output functions (but you don't have access to them during reasoning steps):\n"
-        for tool in output_tools:
-            output_tools_description += f"- {tool['function']['name']}: {tool['function']['description']}\n"
-
-    # Create initial conversation history with previous chains
-    conversation_history = []
-    if previous_chains:
-        for chain in previous_chains:
-            conversation_history.extend(chain)
-
-    # Run thinking loop with thinking tools
-    conversation_history = thinking_loop(
-        task,
-        api_key,
-        thinking_tools,
-        model,
-        temperature,
-        top_p,
-        max_tokens,
-        api_url,
-        verbose,
-        chain_store_api_key=chain_store_api_key,
-        wolfram_app_id=wolfram_app_id,
-        max_reasoning_steps=max_reasoning_steps,
-        sandbox=sandbox,
-        image=image,
-        reflection_mode=reflection_mode,
-        previous_chains=previous_chains,
-        use_planning=use_planning,
-        beam_search_enabled=beam_search_enabled,
-        num_candidates=num_candidates,
-        use_jeremy_planning=use_jeremy_planning,
-        jina_api_key=jina_api_key
-    )
-
-    # Only request final response if we didn't hit max steps
-    final_response = None
-    if not max_reasoning_steps or len([m for m in conversation_history if m['role'] == 'system' and 'Maximum reasoning steps' in m.get('content', '')]) == 0:
-        # Add final completion request
-        final_user_message = {
-            'role': 'user',
-            'content': (
-                'Complete the <CURRENT_TASK>. Do not return <DONE>. '
-                'Note that the user will only see what you return here. '
-                'None of the steps you have taken will be shown to the user, so ensure you return the final answer. '
-                + ('You can return a text response and/or use one of the available output functions.' if output_tools else '')
-            )
-        }
-        conversation_history.append(final_user_message)
+        if api_key is None:
+            raise ValueError('API key not provided.')
 
         if verbose:
-            print(f"{Fore.CYAN}Requesting final response...{Style.RESET_ALL}\n")
+            print(f"\n{Fore.MAGENTA}╭──────────────────────────────────────────{Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}│ Starting Task{Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}├──────────────────────────────────────────{Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}│ {task}{Style.RESET_ALL}")
+            if previous_chains:
+                print(f"{Fore.MAGENTA}│ With {len(previous_chains)} previous conversation chains{Style.RESET_ALL}")
+            print(f"{Fore.MAGENTA}╰──────────────────────────────────────────{Style.RESET_ALL}\n")
 
-        # Get final response with output tools if provided
+        # Initialize E2B sandbox for Python code execution
+        timeout = 60 * 15 # 10 minutes
+        for attempt in range(3):  # Try 3 times
+            try:
+                sandbox = Sandbox(timeout=timeout)
+                break  # If successful, exit the loop
+            except Exception as e:
+                if attempt == 2:  # If this was the last attempt
+                    raise Exception(f"Failed to create sandbox after 3 attempts. Last error: {e}")
+                continue
 
-        # Wrapping in try/except to catch any errors and try again with validated conversation history — for now... just because I'm not 100% sure if the validation is working and I don't want to risk messing up already solid chains
-        try:
-            final_response = send_message_to_api(
-                task,
-                conversation_history,
-                api_key,
-                output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
-                model,
-                temperature,
-                top_p,
-                max_tokens,
-                api_url,
-                verbose
-            )
-        except Exception as e:
-            print(f"{Fore.RED}Error sending final response: {e}{Style.RESET_ALL}")
-            print(f"{Fore.YELLOW}Trying again with validated conversation history...{Style.RESET_ALL}")
-            final_response = send_message_to_api(
-                task,
-                validate_conversation(conversation_history),
-                api_key,
-                output_tools if output_tools else thinking_tools,
-                model,
-                temperature,
-                top_p,
-                max_tokens,
-                api_url,
-                verbose
-            )
-        
-        # Add the final response to the conversation history
-        assistant_message = {
-            'role': 'assistant',
-            'content': final_response.get('content'),
-            'tool_calls': final_response.get('tool_calls', None)
-        }
-        conversation_history.append(assistant_message)
-    else:
-        # Use the last assistant message as the final response
-        final_response = next(
-            (msg for msg in reversed(conversation_history)
-             if msg['role'] == 'assistant' and msg.get('content')),
-            {'content': None}
+        # Define thinking tools (internal tools that can be used during reasoning)
+        thinking_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "python",
+                    "description": "Execute Python code and return the output.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "code": {
+                                "type": "string",
+                                "description": "The Python code to execute"
+                            },
+                        },
+                        "required": ["code"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "find_datapoint_on_web",
+                    "description": "Search Google using SERPAPI to find factual information. Returns top search results with titles, snippets, and URLs.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The specific query"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            }
+        ]
+
+        # Add Wolfram tool if wolfram_app_id is provided
+        if wolfram_app_id:
+            thinking_tools.append({
+                "type": "function",
+                "function": {
+                    "name": "wolfram",
+                    "description": "Query Wolfram Alpha for computations, math, science, and knowledge. Great for mathematical analysis, scientific calculations, data analysis, and fact-checking.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The query to send to Wolfram Alpha. Be specific and precise."
+                            },
+                            "include_pods": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "description": "Optional list of pod names to include (e.g., ['Result', 'Solution', 'Plot']). Leave empty for all pods.",
+                                "default": None
+                            },
+                            "max_width": {
+                                "type": "integer",
+                                "description": "Maximum width for plots/images",
+                                "default": 1000
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            })
+
+        # Add Jina tool if jina_api_key is provided
+        if jina_api_key:
+            thinking_tools.append({
+                "type": "function",
+                "function": {
+                    "name": "get_webpage_content",
+                    "description": "Retrieve the content of a webpage using Jina API. Useful for reading detailed content from search results or specific URLs.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The URL of the webpage to fetch content from"
+                            }
+                        },
+                        "required": ["url"]
+                    }
+                }
+            })
+
+        # Add output tools description
+        output_tools_description = ""
+        if output_tools:
+            output_tools_description = "\n\nWhen providing your final response, you can use these output functions (but you don't have access to them during reasoning steps):\n"
+            for tool in output_tools:
+                output_tools_description += f"- {tool['function']['name']}: {tool['function']['description']}\n"
+
+        # Create initial conversation history with previous chains
+        conversation_history = []
+        if previous_chains:
+            for chain in previous_chains:
+                conversation_history.extend(chain)
+
+        # Run thinking loop with thinking tools
+        conversation_history = thinking_loop(
+            task,
+            api_key,
+            thinking_tools,
+            model,
+            temperature,
+            top_p,
+            max_tokens,
+            api_url,
+            verbose,
+            chain_store_api_key=chain_store_api_key,
+            wolfram_app_id=wolfram_app_id,
+            max_reasoning_steps=max_reasoning_steps,
+            sandbox=sandbox,
+            image=image,
+            reflection_mode=reflection_mode,
+            previous_chains=previous_chains,
+            use_planning=use_planning,
+            beam_search_enabled=beam_search_enabled,
+            num_candidates=num_candidates,
+            use_jeremy_planning=use_jeremy_planning,
+            jina_api_key=jina_api_key
         )
 
-    # Print final response if verbose
-    if verbose and ('content' in final_response or 'tool_calls' in final_response):
-        print(f'\n{Fore.GREEN}Final Response:{Style.RESET_ALL}')
-        if 'content' in final_response and 'tool_calls' in final_response:
-            print(f"Content: {final_response['content']}")
-            print(f"Tool Calls: {final_response['tool_calls']}")
-        elif 'content' in final_response:
-            print(final_response['content'])
+        # Only request final response if we didn't hit max steps
+        final_response = None
+        if not max_reasoning_steps or len([m for m in conversation_history if m['role'] == 'system' and 'Maximum reasoning steps' in m.get('content', '')]) == 0:
+            # Add final completion request
+            final_user_message = {
+                'role': 'user',
+                'content': (
+                    'Complete the <CURRENT_TASK>. Do not return <DONE>. '
+                    'Note that the user will only see what you return here. '
+                    'None of the steps you have taken will be shown to the user, so ensure you return the final answer. '
+                    + ('You can return a text response and/or use one of the available output functions.' if output_tools else '')
+                )
+            }
+            conversation_history.append(final_user_message)
+
+            if verbose:
+                print(f"{Fore.CYAN}Requesting final response...{Style.RESET_ALL}\n")
+
+            # Get final response with output tools if provided
+
+            # Wrapping in try/except to catch any errors and try again with validated conversation history — for now... just because I'm not 100% sure if the validation is working and I don't want to risk messing up already solid chains
+            try:
+                final_response = send_message_to_api(
+                    task,
+                    conversation_history,
+                    api_key,
+                    output_tools if output_tools else thinking_tools,  # Use output tools for final response if provided
+                    model,
+                    temperature,
+                    top_p,
+                    max_tokens,
+                    api_url,
+                    verbose
+                )
+            except Exception as e:
+                print(f"{Fore.RED}Error sending final response: {e}{Style.RESET_ALL}")
+                print(f"{Fore.YELLOW}Trying again with validated conversation history...{Style.RESET_ALL}")
+                final_response = send_message_to_api(
+                    task,
+                    validate_conversation(conversation_history),
+                    api_key,
+                    output_tools if output_tools else thinking_tools,
+                    model,
+                    temperature,
+                    top_p,
+                    max_tokens,
+                    api_url,
+                    verbose
+                )
+            
+            # Add the final response to the conversation history
+            assistant_message = {
+                'role': 'assistant',
+                'content': final_response.get('content'),
+                'tool_calls': final_response.get('tool_calls', None)
+            }
+            conversation_history.append(assistant_message)
         else:
-            print(final_response['tool_calls'])
+            # Use the last assistant message as the final response
+            final_response = next(
+                (msg for msg in reversed(conversation_history)
+                 if msg['role'] == 'assistant' and msg.get('content')),
+                {'content': None}
+            )
 
-    if 'tool_calls' in final_response:
-        final_response_tool_calls = final_response['tool_calls']
-    else:
-        final_response_tool_calls = None
+        # Print final response if verbose
+        if verbose and ('content' in final_response or 'tool_calls' in final_response):
+            print(f'\n{Fore.GREEN}Final Response:{Style.RESET_ALL}')
+            if 'content' in final_response and 'tool_calls' in final_response:
+                print(f"Content: {final_response['content']}")
+                print(f"Tool Calls: {final_response['tool_calls']}")
+            elif 'content' in final_response:
+                print(final_response['content'])
+            else:
+                print(final_response['tool_calls'])
 
-    if 'content' in final_response:
-        final_response_content = final_response['content']
-    else:
-        final_response_content = None
+        if 'tool_calls' in final_response:
+            final_response_tool_calls = final_response['tool_calls']
+        else:
+            final_response_tool_calls = None
 
-    # Log conversation history if logging is enabled
-    if log_conversation:
-        # Remove example chains from conversation history by removing everything prior to the bottom-most system message
-        ### THIS MAY NOT WORK IF WE'RE INJECTING SYSTEM MESSAGES INTO THE CHAIN (I THINK WE'RE DOING THIS, SO IT'S WORTH REVISITING)!
-        bottom_system_message_index = next((i for i, msg in enumerate(reversed(conversation_history)) if msg.get('role') == 'system'), None)
-        if bottom_system_message_index is not None:
-            conversation_history = conversation_history[-bottom_system_message_index:]
+        if 'content' in final_response:
+            final_response_content = final_response['content']
+        else:
+            final_response_content = None
 
-        # Create logs directory if it doesn't exist
-        os.makedirs('logs', exist_ok=True)
+        # Log conversation history if logging is enabled
+        if log_conversation:
+            # Remove example chains from conversation history by removing everything prior to the bottom-most system message
+            ### THIS MAY NOT WORK IF WE'RE INJECTING SYSTEM MESSAGES INTO THE CHAIN (I THINK WE'RE DOING THIS, SO IT'S WORTH REVISITING)!
+            bottom_system_message_index = next((i for i, msg in enumerate(reversed(conversation_history)) if msg.get('role') == 'system'), None)
+            if bottom_system_message_index is not None:
+                conversation_history = conversation_history[-bottom_system_message_index:]
 
-        # Create filename with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'logs/conversation_{timestamp}.json'
+            # Create logs directory if it doesn't exist
+            os.makedirs('logs', exist_ok=True)
 
-        # Prepare log data
-        log_data = {
-            'task': task,
-            'model': model,
-            'temperature': temperature,
-            'top_p': top_p,
-            'max_tokens': max_tokens,
-            'api_url': api_url,
-            'reasoning_chain': conversation_history,
-            'final_response': final_response_content,
-            'final_response_tool_calls': final_response_tool_calls,
-            'thinking_tools': thinking_tools,
-            'output_tools': output_tools
-        }
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f'logs/conversation_{timestamp}.json'
 
-        # Write to file
-        try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(log_data, f, indent=2, ensure_ascii=False)
-            if verbose:
-                print(f"\n{Fore.CYAN}Conversation history logged to: {Style.RESET_ALL}{filename}")
-        except Exception as e:
-            if verbose:
-                print(f"\n{Fore.RED}Failed to log conversation history: {Style.RESET_ALL}{str(e)}")
+            # Prepare log data
+            log_data = {
+                'task': task,
+                'model': model,
+                'temperature': temperature,
+                'top_p': top_p,
+                'max_tokens': max_tokens,
+                'api_url': api_url,
+                'reasoning_chain': conversation_history,
+                'final_response': final_response_content,
+                'final_response_tool_calls': final_response_tool_calls,
+                'thinking_tools': thinking_tools,
+                'output_tools': output_tools
+            }
 
-    return {'content': final_response_content, 'tool_calls': final_response_tool_calls}, conversation_history, thinking_tools, output_tools
+            # Write to file
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(log_data, f, indent=2, ensure_ascii=False)
+                if verbose:
+                    print(f"\n{Fore.CYAN}Conversation history logged to: {Style.RESET_ALL}{filename}")
+            except Exception as e:
+                if verbose:
+                    print(f"\n{Fore.RED}Failed to log conversation history: {Style.RESET_ALL}{str(e)}")
+
+        return {'content': final_response_content, 'tool_calls': final_response_tool_calls}, conversation_history, thinking_tools, output_tools
+
+    finally:
+        # Clean up sandbox resources
+        if sandbox:
+            sandbox.kill()
