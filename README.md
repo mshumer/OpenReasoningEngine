@@ -67,6 +67,7 @@ Get API keys from:
 - [SerpAPI](https://serpapi.com/) - for web search
 - [Jina](https://jina.ai/) (optional) - for webpage content extraction
 - [Wolfram Alpha](https://products.wolframalpha.com/api) (optional) - for computations/scientific queries
+- [Cohere](https://cohere.ai/) (optional) - for learning from past chains
 
 Create a `.env` file:
 ```env
@@ -75,6 +76,7 @@ OPENROUTER_API_KEY="your_openrouter_key_here"
 SERPAPI_API_KEY="your_serpapi_key_here"
 JINA_API_KEY="your_jina_key_here"  # Optional
 WOLFRAM_APP_ID="your_wolfram_key_here"  # Optional
+COHERE_API_KEY="your_cohere_key_here"  # Optional
 ```
 
 ### 3. Load Environment
