@@ -21,6 +21,7 @@ import math
 from e2b_code_interpreter import Sandbox
 from serpapi import GoogleSearch
 from dotenv import load_dotenv
+from urllib.parse import quote
 load_dotenv()
 
 serpapi_api_key = os.environ.get("SERPAPI_API_KEY")
@@ -201,6 +202,39 @@ def wolfram(
     except Exception as e:
         return f"Error querying Wolfram Alpha: {str(e)}"
 
+def get_webpage_content(url: str, jina_api_key: str = None) -> str:
+    """
+    Retrieve webpage content using Jina API.
+    
+    Args:
+        url: The webpage URL to fetch content from
+        jina_api_key: Jina API key for authentication
+        
+    Returns:
+        str: The webpage content or error message
+    """
+    if not jina_api_key:
+        return "Error: Jina API key not provided"
+        
+    try:
+        # URL encode the target URL and prepend Jina API endpoint
+        encoded_url = quote(url, safe='')
+        jina_url = f'https://r.jina.ai/{encoded_url}'
+        
+        headers = {
+            'Authorization': f'Bearer {jina_api_key}'
+        }
+        
+        response = requests.get(jina_url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            return response.text
+        else:
+            return f"Failed to retrieve content. Status code: {response.status_code}"
+            
+    except requests.RequestException as e:
+        return f"Error fetching webpage content: {str(e)}"
+
 def execute_tool(
     tool_name: str,
     parameters: Dict[str, Any],
@@ -209,7 +243,8 @@ def execute_tool(
     model: str = None,
     api_url: str = None,
     wolfram_app_id: str = None,
-    sandbox: Optional[Sandbox] = None
+    sandbox: Optional[Sandbox] = None,
+    jina_api_key: str = None
 ) -> Any:
     """
     Execute the specified tool with the given parameters.
@@ -217,7 +252,8 @@ def execute_tool(
     tools = {
         "python": python_interpreter,
         "find_datapoint_on_web": find_datapoint_on_web,
-        "wolfram": wolfram
+        "wolfram": wolfram,
+        "get_webpage_content": get_webpage_content
     }
 
     if tool_name not in tools:
@@ -236,5 +272,7 @@ def execute_tool(
         parameters = {**parameters, "api_key": serpapi_api_key}
     elif tool_name == "wolfram":
         parameters = {**parameters, "wolfram_app_id": wolfram_app_id}
+    elif tool_name == "get_webpage_content":
+        parameters = {**parameters, "jina_api_key": jina_api_key}
 
     return tool_func(**parameters)

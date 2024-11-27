@@ -8,6 +8,8 @@ import chain_store
 load_dotenv()
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+JINA_API_KEY = os.environ.get("JINA_API_KEY")
+COHERE_API_KEY = os.environ.get("COHERE_API_KEY")
 
 def save_chain_prompt() -> bool:
     """Prompt user if they want to save the chain."""
@@ -47,9 +49,8 @@ def main():
     Use the Python interpreter tool to implement and test this data structure.
     """
 
-    model = "openai/gpt-4o-mini"
+    model = "anthropic/claude-3.5-sonnet"
     api_url = "https://openrouter.ai/api/v1/chat/completions"
-    cohere_api_key = "[REDACTED]"
 
     # Run the engine
     response, conversation_history, thinking_tools, output_tools = complete_reasoning_task(
@@ -58,7 +59,8 @@ def main():
         model=model,
         api_url=api_url,
         verbose=True,
-        use_planning=False
+        use_planning=False,
+        jina_api_key=JINA_API_KEY
     )
 
     # Check if the run was successful (no errors in response)
@@ -71,7 +73,7 @@ def main():
                     task=task,
                     conversation_history=conversation_history,
                     final_response=response,
-                    cohere_api_key=cohere_api_key,
+                    cohere_api_key=COHERE_API_KEY,
                     thinking_tools=thinking_tools,
                     output_tools=output_tools,
                     metadata={"model": model, "api_url": api_url}

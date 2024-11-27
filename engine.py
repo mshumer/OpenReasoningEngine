@@ -37,7 +37,8 @@ def thinking_loop(
     use_planning: bool = True,
     beam_search_enabled: bool = False,
     num_candidates: int = 1,
-    use_jeremy_planning: bool = False
+    use_jeremy_planning: bool = False,
+    jina_api_key: Optional[str] = None
 ) -> List[Dict]:
     """
     Execute the thinking loop and return the conversation history.
@@ -83,11 +84,12 @@ def thinking_loop(
     tools_description = (
         "You have access to these tools:\n"
         "1. find_datapoint_on_web: Search Google using SERPAPI to find factual information. Returns top search results with titles, snippets, and URLs.\n"
-        "2. python: For executing Python code"
+        "2. python: For executing Python code\n"
+        "3. get_webpage_content: Retrieve detailed content from specific webpages using Jina API. Use this when you want to read the full content of a webpage."
     )
 
     if wolfram_app_id:
-        tools_description += "\n3. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
+        tools_description += "\n4. wolfram: Query Wolfram Alpha for precise mathematical, scientific, and factual computations"
 
     # Include the generated plan in the system message
     plan_section = ""
@@ -401,6 +403,7 @@ def thinking_loop(
                         api_url=api_url,
                         wolfram_app_id=wolfram_app_id,
                         sandbox=sandbox,
+                        jina_api_key=jina_api_key
                     )
 
                     # Add tool result to both histories
@@ -471,10 +474,11 @@ def complete_reasoning_task(
     output_tools: Optional[List[Dict]] = None,
     reflection_mode: bool = False,
     previous_chains: Optional[List[List[Dict]]] = None,
-    use_planning: bool = True,
+    use_planning: bool = False,
     beam_search_enabled: bool = False,
     num_candidates: int = 1,
-    use_jeremy_planning: bool = False
+    use_jeremy_planning: bool = False,
+    jina_api_key: Optional[str] = None
 ) -> Tuple[Union[str, Dict], List[Dict], List[Dict], List[Dict]]:
     """
     Execute the reasoning task and return the final response.
@@ -547,6 +551,23 @@ def complete_reasoning_task(
                     "required": ["query"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_webpage_content",
+                "description": "Retrieve the content of a webpage using Jina API. Useful for reading detailed content from search results or specific URLs.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "The URL of the webpage to fetch content from"
+                        }
+                    },
+                    "required": ["url"]
+                }
+            }
         }
     ]
 
@@ -617,7 +638,8 @@ def complete_reasoning_task(
         use_planning=use_planning,
         beam_search_enabled=beam_search_enabled,
         num_candidates=num_candidates,
-        use_jeremy_planning=use_jeremy_planning
+        use_jeremy_planning=use_jeremy_planning,
+        jina_api_key=jina_api_key
     )
 
     # Only request final response if we didn't hit max steps
