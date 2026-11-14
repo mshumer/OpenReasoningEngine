@@ -54,6 +54,7 @@ And over time, as users save successful reasoning chains, we will be able to tra
 ## ⚙️ Installation
 
 ### 1. Clone and Install
+Requires Python 3.11 or newer.
 ```bash
 git clone https://github.com/mshumer/OpenReasoningEngine.git
 cd OpenReasoningEngine
